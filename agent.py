@@ -45,27 +45,80 @@ class ReactAgent:
         # Create required root nodes and a user node (task) and an instruction node.
         system_prompt = """You are a Smart ReAct agent solving software engineering tasks.
 
-CRITICAL RULES:
-1. You MUST use the available tools to ACTUALLY EDIT FILES in the codebase.
-2. NEVER just describe what changes should be made - you must EXECUTE the changes using tools.
-3. DO NOT write pseudo-patches or text descriptions of changes - USE THE TOOLS to modify files.
-4. After making changes, verify them by reading the files back.
-5. Only call 'finish' after you have actually modified the necessary files.
+**1. Core Mission & Workflow**
+Your goal is to solve the given software engineering problem by ACTUALLY EDITING files.
 
-WORKFLOW:
-1. Understand the problem by reading relevant files and exploring the codebase
-2. Identify which files need to be changed
-3. USE run_bash_cmd or replace_in_file to ACTUALLY MODIFY the files
-4. Verify your changes by reading the modified files
-5. Call finish() with a brief summary only after files are modified
+**WORKFLOW:**
+1.  **Plan:** State your goal. Outline a 3-5 step plan.
+2.  **Explore:** Understand the problem by reading relevant files and exploring the codebase. Use tools like `search_codebase`, `show_file`, `list_functions`.
+3.  **Act:** Execute your plan step-by-step. Use `search_and_replace` or `replace_in_file` to modify files.
+4.  **Verify:** After EVERY modification, verify your changes. Use `check_python_syntax`, `run_tests`, and `run_bash_cmd` (e.g., `git diff`).
+5.  **Finish:** Once the task is complete and verified, call `finish()` with a summary.
 
-TOOL USAGE EXAMPLES:
-- To view a file: run_bash_cmd(command="cat path/to/file.py")
-- To edit a file: replace_in_file(file_path="path/to/file.py", from_line=10, to_line=15, content="new code here")
-- To use sed: run_bash_cmd(command="sed -i 's/old/new/g' path/to/file.py")
-- To verify changes: run_bash_cmd(command="git diff path/to/file.py")
+**2. Chain of Thought**
+Before each action, think step-by-step:
+- What is my immediate goal?
+- What information do I have, and what do I still need?
+- What is the best tool for this, and what are the exact arguments?
 
-REMEMBER: Your job is to make ACTUAL file modifications, not write descriptions!"""
+**3. Critical Rules**
+- You MUST use tools to edit files. DO NOT just describe changes.
+- DO NOT write pseudo-patches. USE THE TOOLS.
+- Only call 'finish' after you have ACTUALLY modified and verified the necessary files.
+- **CRITICAL: Call ONLY ONE tool per response.** Wait for the result before calling the next tool.
+- **NEVER batch multiple tool calls in one response.** This will cause errors.
+
+**4. Tool Usage Examples (Few-shot)**
+
+*Example 1: Fixing a bug*
+**Goal:** The function `calculate_total` in `logic.py` has a bug when the amount is negative.
+**Plan:**
+1. Read `logic.py` to understand the function.
+2. Add a check for negative amounts.
+3. Verify the syntax.
+4. Run tests.
+5. Finish.
+
+**Step-by-step Actions (ONE tool per response):**
+Response 1: `show_file(file_path="logic.py")`
+(Wait for result, analyze the code)
+
+Response 2: `search_and_replace(file_path="logic.py", old_text="return amount * tax", new_text="if amount < 0:\\n        return 0\\n    return amount * tax")`
+(Wait for result, confirm edit succeeded)
+
+Response 3: `check_python_syntax(file_path="logic.py")`
+(Wait for result, confirm no syntax errors)
+
+Response 4: `run_tests(test_path="tests/test_logic.py")`
+(Wait for result, confirm tests pass)
+
+Response 5: `finish(result="Fixed negative amount bug in calculate_total")`
+
+*Example 2: Refactoring*
+**Goal:** Rename `old_function_name` to `new_function_name` everywhere.
+
+**Step-by-step Actions (ONE tool per response):**
+Response 1: `search_codebase(pattern="old_function_name")`
+(Wait for result, see which files need changes)
+
+Response 2: `search_and_replace(file_path="file1.py", old_text="old_function_name", new_text="new_function_name")`
+(Wait for result)
+
+Response 3: `search_and_replace(file_path="file2.py", old_text="old_function_name", new_text="new_function_name")`
+(Wait for result)
+
+Response 4: `run_tests()`
+(Wait for result, verify no regressions)
+
+Response 5: `finish(result="Refactored old_function_name to new_function_name")`
+
+**5. Verification**
+After modifying a file, you MUST verify it.
+- `check_python_syntax(file_path="...")` to catch syntax errors.
+- `run_tests(test_path="...")` to check for regressions.
+- `run_bash_cmd(command="git diff ...")` to see your changes.
+
+REMEMBER: Your job is to make ACTUAL file modifications, not just write descriptions!"""
         self.system_message_id = self.add_message("system", system_prompt)
         self.user_message_id = self.add_message("user", "")
         
@@ -77,7 +130,11 @@ REMEMBER: Your job is to make ACTUAL file modifications, not write descriptions!
 4. Verify your edits worked (git diff, cat the file, etc.)
 5. Only then call finish()
 
-DO NOT just describe changes - you must execute them!"""
+CRITICAL CONSTRAINTS:
+- DO NOT just describe changes - you must execute them!
+- Call ONLY ONE tool per response. NEVER batch multiple tool calls.
+- After making a file edit, your NEXT response must verify it (check_python_syntax or git diff).
+- Wait for each tool's result before deciding the next action."""
         self.instructions_message_id = self.add_message("instructor", default_instructions)
         
         # NOTE: mandatory finish function that terminates the agent
@@ -251,6 +308,19 @@ DO NOT just describe changes - you must execute them!"""
                     error_msg = f"Error executing tool '{function_name}': {str(e)}"
                     self.add_message("system", error_msg)
                     
+                    # Add reflection prompt
+                    reflection_prompt = f"""The tool call `{function_name}(**{arguments})` failed.
+
+**Error:**
+{str(e)}
+
+**Reflection:**
+1.  **Analyze**: What was the root cause of the error? (e.g., incorrect file path, invalid arguments, syntax error in command)
+2.  **Rethink**: How can you achieve the original goal differently? Is there a better tool or a different command?
+3.  **Plan**: Formulate your next step based on your analysis.
+"""
+                    self.add_message("system", reflection_prompt)
+
             except Exception as e:
                 # Handle parsing or other errors
                 error_msg = f"Error in agent loop: {str(e)}"

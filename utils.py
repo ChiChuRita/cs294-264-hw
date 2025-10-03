@@ -3,7 +3,6 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from minisweagent import Environment
 from minisweagent.environments import get_environment
 import json
 import threading
@@ -21,7 +20,7 @@ def get_swebench_docker_image_name(instance: dict) -> str:
         image_name = f"docker.io/swebench/sweb.eval.x86_64.{id_docker_compatible}:latest".lower()
     return image_name
 
-def get_sb_environment(instance: dict) -> Environment:
+def get_sb_environment(instance: dict):
     env_config = {
         "image": get_swebench_docker_image_name(instance),
         "cwd": "/testbed",

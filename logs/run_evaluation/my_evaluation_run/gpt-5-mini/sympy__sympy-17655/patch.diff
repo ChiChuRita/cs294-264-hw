@@ -1,4 +1,109 @@
-Import Mul and unwrap scalar*Point in Point.__add__ so number*Point works like Point*number
-----END_FUNCTION_CALL****
-
-No changes detected to generate a patch.
+diff --git a/sympy/geometry/point.py b/sympy/geometry/point.py
+index 7c978c47be..95dfea40e4 100644
+--- a/sympy/geometry/point.py
++++ b/sympy/geometry/point.py
+@@ -183,43 +183,67 @@ def __abs__(self):
+         return Point.distance(origin, self)
+ 
+     def __add__(self, other):
+-        """Add other to self by incrementing self's coordinates by
+-        those of other.
+-
+-        Notes
+-        =====
+-
+-        >>> from sympy.geometry.point import Point
+-
+-        When sequences of coordinates are passed to Point methods, they
+-        are converted to a Point internally. This __add__ method does
+-        not do that so if floating point values are used, a floating
+-        point result (in terms of SymPy Floats) will be returned.
+-
+-        >>> Point(1, 2) + (.1, .2)
+-        Point2D(1.1, 2.2)
+-
+-        If this is not desired, the `translate` method can be used or
+-        another Point can be added:
+-
+-        >>> Point(1, 2).translate(.1, .2)
+-        Point2D(11/10, 11/5)
+-        >>> Point(1, 2) + Point(.1, .2)
+-        Point2D(11/10, 11/5)
+-
+-        See Also
+-        ========
+-
+-        sympy.geometry.point.Point.translate
+-
+-        """
+-        try:
+-            s, o = Point._normalize_dimension(self, Point(other, evaluate=False))
+-        except TypeError:
+-            raise GeometryError("Don't know how to add {} and a Point object".format(other))
+-
+-        coords = [simplify(a + b) for a, b in zip(s, o)]
+-        return Point(coords, evaluate=False)
++            """Add other to self by incrementing self's coordinates by
++            those of other.
++    
++            Notes
++            =====
++    
++            >>> from sympy.geometry.point import Point
++    
++            When sequences of coordinates are passed to Point methods, they
++            are converted to a Point internally. This __add__ method does
++            not do that so if floating point values are used, a floating
++            point result (in terms of SymPy Floats) will be returned.
++    
++            >>> Point(1, 2) + (.1, .2)
++            Point2D(1.1, 2.2)
++    
++            If this is not desired, the `translate` method can be used or
++            another Point can be added:
++    
++            >>> Point(1, 2).translate(.1, .2)
++            Point2D(11/10, 11/5)
++            >>> Point(1, 2) + Point(.1, .2)
++            Point2D(11/10, 11/5)
++    
++            See Also
++            ========
++    
++            sympy.geometry.point.Point.translate
++    
++            """
++            try:
++                s, o = Point._normalize_dimension(self, Point(other, evaluate=False))
++            except TypeError:
++                # Allow adding a scalar multiple of a Point, e.g. Point + (2*Point)
++                # This handles cases where the left multiplication creates a Mul
++                # such as sympify(2.0)*Point, which would otherwise result in a
++                # TypeError when attempting to construct a Point from the Mul.
++                from sympy.core.mul import Mul
++                if isinstance(other, Mul):
++                    # Find a single Point factor and treat everything else as the scalar
++                    point_factor = None
++                    scalar_factors = []
++                    for a in other.args:
++                        if isinstance(a, Point):
++                            if point_factor is None:
++                                point_factor = a
++                            else:
++                                # More than one Point factor: fall back to error
++                                point_factor = None
++                                break
++                        else:
++                            scalar_factors.append(a)
++                    if point_factor is not None:
++                        factor = Mul(*scalar_factors) if scalar_factors else S.One
++                        s, o = Point._normalize_dimension(self, Point(point_factor, evaluate=False))
++                        coords = [simplify(a + factor*b) for a, b in zip(s, o)]
++                        return Point(coords, evaluate=False)
++                raise GeometryError("Don't know how to add {} and a Point object".format(other))
++    
++            coords = [simplify(a + b) for a, b in zip(s, o)]
++            return Point(coords, evaluate=False)
+ 
+     def __contains__(self, item):
+         return item in self.args

@@ -5,6 +5,7 @@ typer>=0.9.0
 datasets>=2.0.0
 rich>=13.0.0
 mini-swe-agent
+docker>=6.0.0,<8.0.0
 python-dotenv>=1.0.0
 numpy==1.26.4
 swebench==4.1.0

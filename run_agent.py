@@ -48,7 +48,18 @@ def process_instance(
         agent = ReactAgent("swe-agent", parser, llm)
         
         # Add functions to the agent BEFORE running
-        agent.add_functions([env.run_bash_cmd, env.replace_in_file, env.show_file, agent.add_instructions_and_backtrack])
+        agent.add_functions([
+            env.run_bash_cmd, 
+            env.replace_in_file, 
+            env.show_file, 
+            agent.add_instructions_and_backtrack,
+            env.search_in_file,
+            env.list_functions,
+            env.search_codebase,
+            env.run_tests,
+            env.search_and_replace,
+            env.check_python_syntax,
+        ])
         
         # Run the agent
         output = agent.run(task, max_steps) 

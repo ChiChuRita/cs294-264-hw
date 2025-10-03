@@ -107,6 +107,47 @@ class SWEEnvironment:
         except Exception as e:
             raise ValueError(f"Error reading file: {str(e)}")
 
+    def search_in_file(self, file_path: str, pattern: str) -> str:
+        """Search for a pattern in a file and return the matching lines."""
+        return self.run_bash_cmd(f"grep '{pattern}' {file_path}")
+
+    def list_functions(self, file_path: str) -> str:
+        """List function and class definitions in a Python file."""
+        return self.run_bash_cmd(f"grep -E '^\\s*(def|class)\\s+' {file_path}")
+
+    def search_codebase(self, pattern: str) -> str:
+        """Search for a pattern recursively in the codebase."""
+        return self.run_bash_cmd(f"grep -r '{pattern}' .")
+
+    def run_tests(self, test_path: str = "") -> str:
+        """
+        Run tests using pytest. If test_path is provided, runs specific tests.
+        Otherwise, runs all tests.
+        """
+        cmd = "python -m pytest -xvs"
+        if test_path:
+            cmd += f" {test_path}"
+        return self.run_bash_cmd(cmd)
+
+    def search_and_replace(self, file_path: str, old_text: str, new_text: str) -> str:
+        """
+        Search for a string in a file and replace all occurrences with a new string.
+        This uses sed. Be careful with special characters.
+        """
+        # Using # as a delimiter to avoid issues with paths in old_text/new_text
+        # Escaping # and & and \ in the texts
+        escaped_old = old_text.replace('\\', '\\\\').replace('#', '\\#').replace('&', '\\&')
+        escaped_new = new_text.replace('\\', '\\\\').replace('#', '\\#').replace('&', '\\&')
+        
+        command = f"sed -i 's#{escaped_old}#{escaped_new}#g' {file_path}"
+        
+        output = self.run_bash_cmd(command)
+        return f"Successfully ran sed command on {file_path}. Output:\\n{output}"
+
+    def check_python_syntax(self, file_path: str) -> str:
+        """Check the syntax of a Python file."""
+        return self.run_bash_cmd(f"python -m py_compile {file_path}")
+
 class DumbEnvironment:
     """
     Dumb environment that just executes the command
