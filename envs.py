@@ -1,5 +1,6 @@
 from utils import get_sb_environment
 import subprocess
+import shlex
 
 class LimitsExceeded(Exception):
     """Raised when the agent has reached its step limit."""
@@ -62,6 +63,16 @@ class SWEEnvironment:
         [Optional] Replace the content of the file from the given line to the given line with the given content
         """
         try:
+            # VALIDATION 1: Prevent modifying test files (they should already be correct!)
+            if '/test' in file_path or file_path.startswith('test'):
+                raise ValueError(
+                    f"⛔ BLOCKED: Cannot modify test file '{file_path}'!\n"
+                    f"Test files define the requirements - they should NOT be changed.\n"
+                    f"You must fix the SOURCE CODE to make the tests pass.\n"
+                    f"\nCommon mistake: Modifying test_*.py files instead of the actual implementation.\n"
+                    f"Action: Find the source file being tested and modify that instead."
+                )
+            
             # Convert line numbers to integers (in case they come as strings from parser)
             from_line = int(from_line)
             to_line = int(to_line)
@@ -81,16 +92,64 @@ class SWEEnvironment:
             if to_line > len(lines):
                 raise ValueError(f"to_line {to_line} exceeds file length {len(lines)}")
             
+            # VALIDATION 2: Check for catastrophic edits (V3 FIX)
+            # Extract old content that will be replaced
+            old_content_lines = lines[from_line-1:to_line]
+            old_content = '\n'.join(old_content_lines)
+            
+            # Import and call validation function
+            from agent import validate_edit_safety
+            validate_edit_safety(file_path, from_line, to_line, old_content, content)
+            
             # Replace the lines (convert to 0-indexed)
-            new_lines = lines[:from_line-1] + [content] + lines[to_line:]
+            # Split content on newlines so multi-line replacements work correctly
+            content_lines = content.split('\n')
+            new_lines = lines[:from_line-1] + content_lines + lines[to_line:]
             new_content = '\n'.join(new_lines)
             
             # Write the modified content back to the file
-            # Use printf to avoid issues with special characters
-            escaped_content = new_content.replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
-            self.env.execute(f'printf "%s" "{escaped_content}" > {file_path}')
+            # FIXED: Use heredoc for safe writing (handles large files, Unicode, no length limit)
+            temp_file = f"/tmp/swe_replace_{abs(hash(file_path))}.tmp"
             
-            return f"Successfully replaced lines {from_line}-{to_line} in {file_path}"
+            # Write to temp file using heredoc (most reliable method)
+            write_cmd = f"cat > {shlex.quote(temp_file)} << 'EDIT_EOF'\n{new_content}\nEDIT_EOF"
+            self.env.execute(write_cmd)
+            
+            # Verify temp file was written correctly (catch corruption early)
+            verify_cmd = f"wc -l {shlex.quote(temp_file)}"
+            verify_output = self.env.execute(verify_cmd)
+            if isinstance(verify_output, dict):
+                verify_output = verify_output.get("output", str(verify_output))
+            
+            temp_line_count = int(verify_output.strip().split()[0])
+            expected_line_count = len(new_lines)
+            
+            if temp_line_count == 0 and expected_line_count > 0:
+                raise ValueError(f"Temp file is empty! Expected {expected_line_count} lines. Write failed!")
+            
+            # Atomic move (preserves permissions, safer than direct write)
+            self.env.execute(f"mv {shlex.quote(temp_file)} {shlex.quote(file_path)}")
+            
+            # Final verification to catch any corruption
+            verify_final_cmd = f"wc -l {shlex.quote(file_path)}"
+            verify_final = self.env.execute(verify_final_cmd)
+            if isinstance(verify_final, dict):
+                verify_final = verify_final.get("output", str(verify_final))
+            
+            final_line_count = int(verify_final.strip().split()[0])
+            
+            if final_line_count == 0 and expected_line_count > 0:
+                # Emergency: file corrupted, restore from git
+                raise ValueError(
+                    f"CRITICAL: File is empty after write! Expected {expected_line_count} lines.\n"
+                    f"Attempting to restore from git..."
+                )
+                try:
+                    self.env.execute(f"git checkout -- {shlex.quote(file_path)}")
+                except:
+                    pass  # If restore fails, at least we raised the error
+            
+            return f"Successfully replaced lines {from_line}-{to_line} in {file_path} ({final_line_count} lines total)"
         except Exception as e:
             raise ValueError(f"Error replacing content in file: {str(e)}")
     
@@ -109,7 +168,8 @@ class SWEEnvironment:
 
     def search_in_file(self, file_path: str, pattern: str) -> str:
         """Search for a pattern in a file and return the matching lines."""
-        return self.run_bash_cmd(f"grep '{pattern}' {file_path}")
+        # FIXED: Use shlex.quote to prevent shell injection
+        return self.run_bash_cmd(f"grep {shlex.quote(pattern)} {shlex.quote(file_path)}")
 
     def list_functions(self, file_path: str) -> str:
         """List function and class definitions in a Python file."""
@@ -117,7 +177,8 @@ class SWEEnvironment:
 
     def search_codebase(self, pattern: str) -> str:
         """Search for a pattern recursively in the codebase."""
-        return self.run_bash_cmd(f"grep -r '{pattern}' .")
+        # FIXED: Use shlex.quote to prevent shell injection
+        return self.run_bash_cmd(f"grep -r {shlex.quote(pattern)} .")
 
     def run_tests(self, test_path: str = "") -> str:
         """
@@ -132,21 +193,81 @@ class SWEEnvironment:
     def search_and_replace(self, file_path: str, old_text: str, new_text: str) -> str:
         """
         Search for a string in a file and replace all occurrences with a new string.
-        This uses sed. Be careful with special characters.
+        FIXED: Uses Python for reliability (handles all special characters correctly).
         """
-        # Using # as a delimiter to avoid issues with paths in old_text/new_text
-        # Escaping # and & and \ in the texts
-        escaped_old = old_text.replace('\\', '\\\\').replace('#', '\\#').replace('&', '\\&')
-        escaped_new = new_text.replace('\\', '\\\\').replace('#', '\\#').replace('&', '\\&')
+        # VALIDATION: Prevent modifying test files
+        if '/test' in file_path or file_path.startswith('test'):
+            raise ValueError(
+                f"⛔ BLOCKED: Cannot modify test file '{file_path}'!\n"
+                f"Test files define the requirements - they should NOT be changed.\n"
+                f"You must fix the SOURCE CODE to make the tests pass."
+            )
         
-        command = f"sed -i 's#{escaped_old}#{escaped_new}#g' {file_path}"
+        # Use Python's string.replace() which is more reliable than sed
+        py_script = f"""
+import sys
+try:
+    with open({repr(file_path)}, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Count occurrences
+    count = content.count({repr(old_text)})
+    if count == 0:
+        print(f"Warning: Pattern not found in {repr(file_path)}", file=sys.stderr)
+        sys.exit(0)
+    
+    # Replace all occurrences
+    new_content = content.replace({repr(old_text)}, {repr(new_text)})
+    
+    # Write back atomically
+    import tempfile, os, shutil
+    fd, temp_path = tempfile.mkstemp(dir=os.path.dirname({repr(file_path)}))
+    try:
+        os.write(fd, new_content.encode('utf-8'))
+        os.close(fd)
+        shutil.move(temp_path, {repr(file_path)})
+    except:
+        os.close(fd)
+        os.unlink(temp_path)
+        raise
+    
+    print(f"Replaced {{count}} occurrence(s) in {file_path}")
+except Exception as e:
+    print(f"Error: {{e}}", file=sys.stderr)
+    sys.exit(1)
+"""
         
-        output = self.run_bash_cmd(command)
-        return f"Successfully ran sed command on {file_path}. Output:\\n{output}"
+        output = self.run_bash_cmd(f"python3 -c {shlex.quote(py_script)}")
+        return f"Successfully replaced text in {file_path}. Output:\n{output}"
 
     def check_python_syntax(self, file_path: str) -> str:
         """Check the syntax of a Python file."""
         return self.run_bash_cmd(f"python -m py_compile {file_path}")
+    
+    def show_lines_with_numbers(self, file_path: str, from_line: int, to_line: int) -> str:
+        """
+        Show specific lines from a file with line numbers and visible indentation.
+        This helps you see the exact indentation before editing.
+        
+        Args:
+            file_path: Path to the file
+            from_line: Starting line number (1-indexed)
+            to_line: Ending line number (1-indexed)
+        
+        Returns:
+            Lines with numbers and indentation markers
+        """
+        try:
+            # Use sed to extract the lines and nl to add line numbers
+            output = self.run_bash_cmd(f"sed -n '{from_line},{to_line}p' {file_path} | cat -A")
+            # cat -A shows tabs as ^I and line ends as $, making indentation visible
+            
+            # Also show a cleaner version with line numbers
+            clean_output = self.run_bash_cmd(f"sed -n '{from_line},{to_line}p' {file_path} | nl -ba -v {from_line}")
+            
+            return f"Lines {from_line}-{to_line} from {file_path}:\n\n{clean_output}\n\n(With indentation markers - spaces are normal, ^I means tab, $ means line end):\n{output}"
+        except Exception as e:
+            raise ValueError(f"Error reading lines from file: {str(e)}")
 
 class DumbEnvironment:
     """

@@ -1,0 +1,65 @@
+diff --git a/django/db/backends/postgresql/client.py b/django/db/backends/postgresql/client.py
+index 7fca6eff30..77148d20fe 100644
+--- a/django/db/backends/postgresql/client.py
++++ b/django/db/backends/postgresql/client.py
+@@ -38,27 +38,41 @@ class DatabaseClient(BaseDatabaseClient):
+         sigint_handler = signal.getsignal(signal.SIGINT)
+         try:
+             if passwd:
+-                # Create temporary .pgpass file.
+-                temp_pgpass = NamedTemporaryFile(mode='w+')
++                # Prefer setting PGPASSWORD in the environment for subprocess.run,
++                # which is supported on Python 3.5+ (Django 2.1+ minimum).
++                # Fall back to creating a temporary .pgpass file if writing
++                # the password is not possible due to encoding issues.
++                env = os.environ.copy()
++                env['PGPASSWORD'] = passwd
++                # Allow SIGINT to pass to psql to abort queries.
++                signal.signal(signal.SIGINT, signal.SIG_IGN)
+                 try:
+-                    print(
+-                        _escape_pgpass(host) or '*',
+-                        str(port) or '*',
+-                        _escape_pgpass(dbname) or '*',
+-                        _escape_pgpass(user) or '*',
+-                        _escape_pgpass(passwd),
+-                        file=temp_pgpass,
+-                        sep=':',
+-                        flush=True,
+-                    )
+-                    os.environ['PGPASSFILE'] = temp_pgpass.name
++                    subprocess.run(args, env=env, check=True)
+                 except UnicodeEncodeError:
+-                    # If the current locale can't encode the data, let the
+-                    # user input the password manually.
+-                    pass
+-            # Allow SIGINT to pass to psql to abort queries.
+-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+-            subprocess.check_call(args)
++                    # If the current locale can't encode the data, fall back to
++                    # using a temporary .pgpass file so the user can input the
++                    # password manually if needed.
++                    temp_pgpass = NamedTemporaryFile(mode='w+')
++                    try:
++                        print(
++                            _escape_pgpass(host) or '*',
++                            str(port) or '*',
++                            _escape_pgpass(dbname) or '*',
++                            _escape_pgpass(user) or '*',
++                            _escape_pgpass(passwd),
++                            file=temp_pgpass,
++                            sep=':',
++                            flush=True,
++                        )
++                        os.environ['PGPASSFILE'] = temp_pgpass.name
++                        subprocess.check_call(args)
++                    except UnicodeEncodeError:
++                        # If even writing to the temp file fails, let psql prompt.
++                        pass
++            else:
++                # No password provided — use the original behavior.
++                signal.signal(signal.SIGINT, signal.SIG_IGN)
++                subprocess.check_call(args)
+         finally:
+             # Restore the original SIGINT handler.
+             signal.signal(signal.SIGINT, sigint_handler)

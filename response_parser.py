@@ -82,7 +82,8 @@ ls -la
             # Split into name and value (first line is name, rest is value)
             lines = arg_block.split('\n', 1)
             arg_name = lines[0].strip()
-            arg_value = lines[1].strip() if len(lines) > 1 else ""
+            # Only strip trailing whitespace from value to preserve leading indentation
+            arg_value = lines[1].rstrip() if len(lines) > 1 else ""
             
             if arg_name:
                 arguments[arg_name] = arg_value

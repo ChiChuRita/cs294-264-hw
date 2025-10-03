@@ -1,0 +1,153 @@
+2025-10-03 10:02:35,882 - INFO - Creating container for astropy__astropy-7166...
+2025-10-03 10:02:35,977 - INFO - Container for astropy__astropy-7166 created: 48dea30de54e099ef8616e76390accd8c024be08a2a0a55a3ed22ef05f504bed
+2025-10-03 10:02:36,135 - INFO - Container for astropy__astropy-7166 started: 48dea30de54e099ef8616e76390accd8c024be08a2a0a55a3ed22ef05f504bed
+2025-10-03 10:02:36,135 - INFO - Intermediate patch for astropy__astropy-7166 written to logs/run_evaluation/my_evaluation4_run/gpt-5-mini/astropy__astropy-7166/patch.diff, now applying to container...
+2025-10-03 10:02:36,328 - INFO - >>>>> Applied Patch:
+Checking patch astropy/utils/misc.py...
+Applied patch astropy/utils/misc.py cleanly.
+
+2025-10-03 10:02:39,902 - INFO - Git diff before:
+diff --git a/astropy/utils/misc.py b/astropy/utils/misc.py
+index de3fb01d1..843e2115a 100644
+--- a/astropy/utils/misc.py
++++ b/astropy/utils/misc.py
+@@ -528,14 +528,55 @@ class InheritDocstrings(type):
+                 not key.startswith('_'))
+ 
+         for key, val in dct.items():
+-            if (inspect.isfunction(val) and
+-                is_public_member(key) and
+-                val.__doc__ is None):
+-                for base in cls.__mro__[1:]:
+-                    super_method = getattr(base, key, None)
+-                    if super_method is not None:
+-                        val.__doc__ = super_method.__doc__
+-                        break
++            if (is_public_member(key) and getattr(val, '__doc__', None) is None):
++                # Support regular functions, classmethod/staticmethod wrappers,
++                # and properties. For functions and wrapped functions
++                # (classmethod/staticmethod) try to set the underlying function's
++                # __doc__; for properties, copy docs for fget/fset/fdel and the
++                # property's own __doc__ where possible.
++                if inspect.isfunction(val):
++                    target_getter = lambda v: v
++                elif isinstance(val, (classmethod, staticmethod)):
++                    target_getter = lambda v: v.__func__
++                elif isinstance(val, property):
++                    target_getter = None
++                else:
++                    target_getter = None
++
++                if target_getter is not None:
++                    target = target_getter(val)
++                    for base in cls.__mro__[1:]:
++                        super_method = getattr(base, key, None)
++                        if super_method is not None:
++                            doc = getattr(super_method, '__doc__', None)
++                            if doc:
++                                try:
++                                    target.__doc__ = doc
++                                except Exception:
++                                    # Some objects may not allow setting __doc__
++                                    pass
++                                break
++                else:
++                    # Handle property objects specially
++                    if isinstance(val, property):
++                        for base in cls.__mro__[1:]:
++                            super_prop = getattr(base, key, None)
++                            if isinstance(super_prop, property):
++                                try:
++                                    if val.fget and super_prop.fget and getattr(val.fget, '__doc__', None) is None:
++                                        val.fget.__doc__ = super_prop.fget.__doc__
++                                    if val.fset and super_prop.fset and getattr(val.fset, '__doc__', None) is None:
++                                        val.fset.__doc__ = super_prop.fset.__doc__
++                                    if val.fdel and super_prop.fdel and getattr(val.fdel, '__doc__', None) is None:
++                                        val.fdel.__doc__ = super_prop.fdel.__doc__
++                                except Exception:
++                                    pass
++                                try:
++                                    if getattr(val, '__doc__', None) is None and getattr(super_prop, '__doc__', None):
++                                        val.__doc__ = super_prop.__doc__
++                                except Exception:
++                                    pass
++                                break
+ 
+         super().__init__(name, bases, dct)
+2025-10-03 10:02:39,902 - INFO - Eval script for astropy__astropy-7166 written to logs/run_evaluation/my_evaluation4_run/gpt-5-mini/astropy__astropy-7166/eval.sh; copying to container...
+2025-10-03 10:03:10,766 - INFO - Test runtime: 30.81 seconds
+2025-10-03 10:03:10,766 - INFO - Test output for astropy__astropy-7166 written to logs/run_evaluation/my_evaluation4_run/gpt-5-mini/astropy__astropy-7166/test_output.txt
+2025-10-03 10:03:10,927 - INFO - Git diff after:
+diff --git a/astropy/utils/misc.py b/astropy/utils/misc.py
+index de3fb01d1..843e2115a 100644
+--- a/astropy/utils/misc.py
++++ b/astropy/utils/misc.py
+@@ -528,14 +528,55 @@ class InheritDocstrings(type):
+                 not key.startswith('_'))
+ 
+         for key, val in dct.items():
+-            if (inspect.isfunction(val) and
+-                is_public_member(key) and
+-                val.__doc__ is None):
+-                for base in cls.__mro__[1:]:
+-                    super_method = getattr(base, key, None)
+-                    if super_method is not None:
+-                        val.__doc__ = super_method.__doc__
+-                        break
++            if (is_public_member(key) and getattr(val, '__doc__', None) is None):
++                # Support regular functions, classmethod/staticmethod wrappers,
++                # and properties. For functions and wrapped functions
++                # (classmethod/staticmethod) try to set the underlying function's
++                # __doc__; for properties, copy docs for fget/fset/fdel and the
++                # property's own __doc__ where possible.
++                if inspect.isfunction(val):
++                    target_getter = lambda v: v
++                elif isinstance(val, (classmethod, staticmethod)):
++                    target_getter = lambda v: v.__func__
++                elif isinstance(val, property):
++                    target_getter = None
++                else:
++                    target_getter = None
++
++                if target_getter is not None:
++                    target = target_getter(val)
++                    for base in cls.__mro__[1:]:
++                        super_method = getattr(base, key, None)
++                        if super_method is not None:
++                            doc = getattr(super_method, '__doc__', None)
++                            if doc:
++                                try:
++                                    target.__doc__ = doc
++                                except Exception:
++                                    # Some objects may not allow setting __doc__
++                                    pass
++                                break
++                else:
++                    # Handle property objects specially
++                    if isinstance(val, property):
++                        for base in cls.__mro__[1:]:
++                            super_prop = getattr(base, key, None)
++                            if isinstance(super_prop, property):
++                                try:
++                                    if val.fget and super_prop.fget and getattr(val.fget, '__doc__', None) is None:
++                                        val.fget.__doc__ = super_prop.fget.__doc__
++                                    if val.fset and super_prop.fset and getattr(val.fset, '__doc__', None) is None:
++                                        val.fset.__doc__ = super_prop.fset.__doc__
++                                    if val.fdel and super_prop.fdel and getattr(val.fdel, '__doc__', None) is None:
++                                        val.fdel.__doc__ = super_prop.fdel.__doc__
++                                except Exception:
++                                    pass
++                                try:
++                                    if getattr(val, '__doc__', None) is None and getattr(super_prop, '__doc__', None):
++                                        val.__doc__ = super_prop.__doc__
++                                except Exception:
++                                    pass
++                                break
+ 
+         super().__init__(name, bases, dct)
+2025-10-03 10:03:10,927 - INFO - Grading answer for astropy__astropy-7166...
+2025-10-03 10:03:10,928 - INFO - report: {'astropy__astropy-7166': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': True, 'tests_status': {'FAIL_TO_PASS': {'success': ['astropy/utils/tests/test_misc.py::test_inherit_docstrings'], 'failure': []}, 'PASS_TO_PASS': {'success': ['astropy/utils/tests/test_misc.py::test_isiterable', 'astropy/utils/tests/test_misc.py::test_signal_number_to_name_no_failure', 'astropy/utils/tests/test_misc.py::test_skip_hidden', 'astropy/utils/tests/test_misc.py::test_JsonCustomEncoder', 'astropy/utils/tests/test_misc.py::test_check_broadcast', 'astropy/utils/tests/test_misc.py::test_dtype_bytes_or_chars'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for astropy__astropy-7166: resolved: True
+2025-10-03 10:03:10,929 - INFO - Attempting to stop container sweb.eval.astropy__astropy-7166.my_evaluation4_run...
+2025-10-03 10:03:26,055 - INFO - Attempting to remove container sweb.eval.astropy__astropy-7166.my_evaluation4_run...
+2025-10-03 10:03:26,064 - INFO - Container sweb.eval.astropy__astropy-7166.my_evaluation4_run removed.

@@ -1,0 +1,68 @@
+diff --git a/astropy/utils/misc.py b/astropy/utils/misc.py
+index de3fb01d1..bf59ddde2 100644
+--- a/astropy/utils/misc.py
++++ b/astropy/utils/misc.py
+@@ -528,14 +528,55 @@ class InheritDocstrings(type):
+                 not key.startswith('_'))
+ 
+         for key, val in dct.items():
+-            if (inspect.isfunction(val) and
+-                is_public_member(key) and
+-                val.__doc__ is None):
+-                for base in cls.__mro__[1:]:
+-                    super_method = getattr(base, key, None)
+-                    if super_method is not None:
+-                        val.__doc__ = super_method.__doc__
+-                        break
++            if not is_public_member(key):
++                continue
++
++            # Determine if this member is a plain function or a descriptor
++            # wrapping a function (property, classmethod, staticmethod).
++            func = None
++            wrapper_doc = getattr(val, '__doc__', None)
++            if inspect.isfunction(val):
++                func = val
++            elif isinstance(val, classmethod) or isinstance(val, staticmethod):
++                func = getattr(val, '__func__', None)
++            elif isinstance(val, property):
++                func = getattr(val, 'fget', None)
++
++            # If either the wrapper or the underlying function already has a
++            # docstring, don't overwrite it.
++            if (wrapper_doc is not None) or (func is not None and getattr(func, '__doc__', None) is not None):
++                continue
++
++            for base in cls.__mro__[1:]:
++                super_method = getattr(base, key, None)
++                if super_method is None:
++                    continue
++
++                # Get docstring from the superclass method, handling descriptors.
++                super_doc = getattr(super_method, '__doc__', None)
++                if isinstance(super_method, classmethod) or isinstance(super_method, staticmethod):
++                    super_doc = getattr(getattr(super_method, '__func__', None), '__doc__', super_doc)
++                elif isinstance(super_method, property):
++                    super_doc = getattr(getattr(super_method, 'fget', None), '__doc__', super_doc)
++
++                if super_doc:
++                    if func is not None:
++                        try:
++                            func.__doc__ = super_doc
++                        except Exception:
++                            # Be conservative: if we can't set it, try setting on
++                            # the wrapper itself.
++                            try:
++                                val.__doc__ = super_doc
++                            except Exception:
++                                pass
++                    else:
++                        # Fallback: set on wrapper if possible
++                        try:
++                            val.__doc__ = super_doc
++                        except Exception:
++                            pass
++                    break
+ 
+         super().__init__(name, bases, dct)
+ 

@@ -1,0 +1,80 @@
+diff --git a/sphinx/ext/napoleon/docstring.py b/sphinx/ext/napoleon/docstring.py
+index d8cb75a5f..68418e39e 100644
+--- a/sphinx/ext/napoleon/docstring.py
++++ b/sphinx/ext/napoleon/docstring.py
+@@ -940,12 +940,69 @@ def _tokenize_type_spec(spec: str) -> List[str]:
+         else:
+             return [item]
+ 
+-    tokens = list(
+-        item
+-        for raw_token in _token_regex.split(spec)
+-        for item in postprocess(raw_token)
+-        if item
+-    )
++    # If spec is empty, return empty list early.
++    if not spec:
++        return []
++
++    # Protect comma+space occurrences that are inside parentheses, braces,
++    # or within string literals. This prevents splitting on them (which would
++    # incorrectly separate function-like type specs such as dict(str, int)).
++    placeholder = "\uFFFFCOMMA\uFFFF"
++    chars = list(spec)
++    depth_paren = 0
++    depth_brace = 0
++    in_quote = None
++    i = 0
++    out_chars = []
++
++    while i < len(chars):
++        c = chars[i]
++        # If currently in a quoted string, just copy until the corresponding quote
++        if in_quote:
++            out_chars.append(c)
++            # check for end of quote (ignore escaped quotes)
++            if c == in_quote and (i == 0 or chars[i - 1] != '\\'):
++                in_quote = None
++            i += 1
++            continue
++
++        # Not currently in a quote
++        if c in ('"', "'"):
++            in_quote = c
++            out_chars.append(c)
++            i += 1
++            continue
++
++        # Track nesting for parentheses and braces
++        if c == '(':
++            depth_paren += 1
++        elif c == ')':
++            if depth_paren > 0:
++                depth_paren -= 1
++        elif c == '{':
++            depth_brace += 1
++        elif c == '}':
++            if depth_brace > 0:
++                depth_brace -= 1
++
++        # If we see a comma followed by space and we are inside parens/braces,
++        # replace with placeholder so the regex won't split it.
++        if c == ',' and i + 1 < len(chars) and chars[i + 1] == ' ' and (depth_paren > 0 or depth_brace > 0):
++            out_chars.append(placeholder)
++            i += 2
++            continue
++
++        out_chars.append(c)
++        i += 1
++
++    safe_spec = "".join(out_chars)
++
++    tokens = []
++    for raw_token in _token_regex.split(safe_spec):
++        for item in postprocess(raw_token):
++            if item:
++                # restore protected comma+space
++                tokens.append(item.replace(placeholder, ", "))
+     return tokens
+ 
+ 
