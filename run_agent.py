@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import concurrent.futures
-import subprocess
 from pathlib import Path
 
 import typer
@@ -47,11 +46,12 @@ def process_instance(
         env = SWEEnvironment(instance)
         # Initialize the agent
         agent = ReactAgent("swe-agent", parser, llm)
+        
+        # Add functions to the agent BEFORE running
+        agent.add_functions([env.run_bash_cmd, env.replace_in_file, env.show_file, agent.add_instructions_and_backtrack])
+        
         # Run the agent
         output = agent.run(task, max_steps) 
-        
-        # TODO(student): Add more functions here
-        # agent.add_functions([env.run_bash_cmd, env.replace_in_file, env.show_file, ...])
         
         # Generate patch for SWE-Bench
         result = env.generate_patch(output)

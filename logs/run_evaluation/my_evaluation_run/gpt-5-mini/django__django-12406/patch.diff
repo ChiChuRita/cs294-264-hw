@@ -1,0 +1,3 @@
+Avoid explicit empty choice ("---------") for required ModelChoiceField when using RadioSelect (no initial); updated django/forms/models.py
+
+No changes detected to generate a patch.

@@ -1,0 +1,57 @@
+diff --git a/sphinx/ext/napoleon/docstring.py b/sphinx/ext/napoleon/docstring.py
+index d8cb75a5f..b57061ed0 100644
+--- a/sphinx/ext/napoleon/docstring.py
++++ b/sphinx/ext/napoleon/docstring.py
+@@ -928,6 +928,42 @@ def _recombine_set_tokens(tokens: List[str]) -> List[str]:
+     return list(combine_set(token_queue))
+ 
+ 
++def _recombine_paren_tokens(tokens: List[str]) -> List[str]:
++    """
++    Recombine tokens that were split inside parentheses into a single token.
++    Keeps constructs like "dict(str, str)" as one token instead of being split
++    at the comma by the general tokenizer.
++    """
++    token_queue = collections.deque(tokens)
++
++    def combine_paren(tokens):
++        while True:
++            try:
++                token = tokens.popleft()
++            except IndexError:
++                break
++
++            if token == "(":
++                # Collect tokens until the matching closing parenthesis, respecting nesting.
++                parts = ["("]
++                open_paren = 1
++                while tokens:
++                    t = tokens.popleft()
++                    parts.append(t)
++                    if t == "(":
++                        open_paren += 1
++                    elif t == ")":
++                        open_paren -= 1
++                        if open_paren == 0:
++                            break
++                # Join collected parts into a single token, e.g. "(str, str)"
++                yield "".join(parts)
++            else:
++                yield token
++
++    return list(combine_paren(token_queue))
++
++
+ def _tokenize_type_spec(spec: str) -> List[str]:
+     def postprocess(item):
+         if _default_regex.match(item):
+@@ -1026,6 +1062,9 @@ def _convert_numpy_type_spec(_type: str, location: str = None, translations: dic
+ 
+     tokens = _tokenize_type_spec(_type)
+     combined_tokens = _recombine_set_tokens(tokens)
++    # also recombine parentheses so constructs like dict(str, str)
++    # are kept together instead of being split at commas
++    combined_tokens = _recombine_paren_tokens(combined_tokens)
+     types = [
+         (token, _token_type(token, location))
+         for token in combined_tokens

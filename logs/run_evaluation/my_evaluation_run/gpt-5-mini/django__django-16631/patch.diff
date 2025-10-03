@@ -1,0 +1,42 @@
+diff --git a/docs/ref/settings.txt b/docs/ref/settings.txt
+index 41387886c0..76173343d8 100644
+--- a/docs/ref/settings.txt
++++ b/docs/ref/settings.txt
+@@ -2301,19 +2301,24 @@ Default: ``[]``
+ A list of fallback secret keys for a particular Django installation. These are
+ used to allow rotation of the ``SECRET_KEY``.
+ 
+-In order to rotate your secret keys, set a new ``SECRET_KEY`` and move the
+-previous value to the beginning of ``SECRET_KEY_FALLBACKS``. Then remove the
+-old values from the end of the ``SECRET_KEY_FALLBACKS`` when you are ready to
+-expire the sessions, password reset tokens, and so on, that make use of them.
+-
+-.. note::
+-
+-    Signing operations are computationally expensive. Having multiple old key
+-    values in ``SECRET_KEY_FALLBACKS`` adds additional overhead to all checks
+-    that don't match an earlier key.
+-
+-    As such, fallback values should be removed after an appropriate period,
+-    allowing for key rotation.
++When rotating your secret key, you can set a new ``SECRET_KEY`` and move the
++previous value to the beginning of ``SECRET_KEY_FALLBACKS`` to allow signing
++operations that consult fallback keys to verify values created with older
++keys. For example, the cookie signer (used for signed cookies) and
++:func:`~django.core.signing.loads`/ :func:`~django.core.signing.dumps` (when
++passed ``fallback_keys``) will try the values in ``SECRET_KEY_FALLBACKS`` when
++verifying signatures.
++
++Note, however, that not all uses of the secret key consult
++``SECRET_KEY_FALLBACKS``. In particular,
++:meth:`~django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash()`
++calls :func:`~django.utils.crypto.salted_hmac()` without providing an explicit
++``secret`` argument, which causes it to use ``settings.SECRET_KEY`` only.
++Putting an old key into ``SECRET_KEY_FALLBACKS`` will not preserve session
++authentication hashes created by that method; rotating ``SECRET_KEY`` can
++therefore log users out. Remove old values from the end of
++``SECRET_KEY_FALLBACKS`` when you are ready to expire the signed values that
++do make use of them.
+ 
+ Uses of the secret key values shouldn't assume that they are text or bytes.
+ Every use should go through :func:`~django.utils.encoding.force_str` or

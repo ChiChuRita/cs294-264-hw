@@ -1,7 +1,10 @@
 # Core dependencies for CS294 HW1 ReAct Agent
-openai>=1.0.0
-pyyaml>=6.0
+openai==1.23.6
+pyyaml==6.0.1
 typer>=0.9.0
 datasets>=2.0.0
 rich>=13.0.0
 mini-swe-agent
+python-dotenv>=1.0.0
+numpy==1.26.4
+swebench==4.1.0

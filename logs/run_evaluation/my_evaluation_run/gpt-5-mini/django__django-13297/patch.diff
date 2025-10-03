@@ -1,0 +1,46 @@
+diff --git a/django/views/generic/base.py b/django/views/generic/base.py
+index ea5baca08d..5a6eb0a553 100644
+--- a/django/views/generic/base.py
++++ b/django/views/generic/base.py
+@@ -23,10 +23,40 @@ class ContextMixin:
+     """
+     extra_context = None
+ 
+-    def get_context_data(self, **kwargs):
++        def get_context_data(self, **kwargs):
+         kwargs.setdefault('view', self)
+         if self.extra_context is not None:
+             kwargs.update(self.extra_context)
++        # Resolve any lazy objects (e.g. SimpleLazyObject or lazy() proxies)
++        # so consumers of the context get concrete values. This avoids cases
++        # where code expects a real value (like a slug string) but receives
++        # a SimpleLazyObject that can break lookups or DB bindings.
++        try:
++            from django.utils.functional import Promise, LazyObject
++        except Exception:
++            Promise = LazyObject = None
++
++        for key, value in list(kwargs.items()):
++            unwrapped = value
++            try:
++                if LazyObject is not None and isinstance(value, LazyObject):
++                    # Accessing __class__ on the proxy will force evaluation.
++                    _ = value.__class__
++                    unwrapped = value
++                elif Promise is not None and isinstance(value, Promise):
++                    # For lazy() proxies (Promise subclasses), try to force
++                    # evaluation. bool() will often trigger the proxy; fallback
++                    # to str() if needed.
++                    try:
++                        bool(value)
++                        unwrapped = value
++                    except Exception:
++                        unwrapped = str(value)
++            except Exception:
++                # If forcing evaluation raises, leave original value.
++                unwrapped = value
++
++            kwargs[key] = unwrapped
+         return kwargs
+ 
+ 

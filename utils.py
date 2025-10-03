@@ -87,7 +87,8 @@ def save_traj(
         "trajectory_format": "mini-swe-agent-1",
     } | kwargs
     if agent is not None:
-        # NOTE: save messages if you want 
+        # Save the full message history for debugging
+        data["messages"] = agent.id_to_message
         data["info"]["config"] = {
             "agent": agent.name,
             "model": agent.llm.model_name,
