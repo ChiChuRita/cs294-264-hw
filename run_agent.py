@@ -23,6 +23,7 @@ def process_instance(
     output_dir: Path,
     model_name: str,
     max_steps: int,
+    baseline: bool,
 ) -> None:
     """Process a single SWEBench instance."""
     instance_id = instance["instance_id"]
@@ -46,14 +47,32 @@ def process_instance(
         env = MinimalSWEEnvironment(instance)
         # Initialize the agent
         agent = ReactAgent("swe-react-agent", parser, llm)
-        
-        # Minimal tools only (bash-only style + backtrack)
-        agent.add_functions([
-            env.run_bash_cmd,
-            env.show_file,  # convenience wrapper around nl -ba
-            env.replace_in_file,  # safe multi-line replace via heredoc
-            agent.add_instructions_and_backtrack,
-        ])
+
+        # Tool registration
+        if baseline:
+            # Bash-only baseline: expose only shell + backtrack
+            agent.add_functions([
+                env.run_bash_cmd,
+                agent.add_instructions_and_backtrack,
+            ])
+            # Tighten the prompt to bash-only
+            try:
+                agent._system_prompt = (
+                    "ROLE: Bash-only coding agent (baseline). Use ONLY run_bash_cmd for search, edit, test, and diff.\n\n"
+                    "- Make the smallest viable change (1–5 lines). Never modify tests.\n"
+                    "- After any edit, immediately verify with git status/diff and re-open the edited span.\n"
+                    "- If stuck or repeating failures, use add_instructions_and_backtrack with a new strategy."
+                )
+            except Exception:
+                pass
+        else:
+            # Minimal tools (bash-first) for the non-baseline agent
+            agent.add_functions([
+                env.run_bash_cmd,
+                env.show_file,  # convenience wrapper around nl -ba
+                env.replace_in_file,  # safe multi-line replace via heredoc
+                agent.add_instructions_and_backtrack,
+            ])
         
         # Run the agent (first pass)
         output = agent.run(task, max_steps)
@@ -102,6 +121,7 @@ def main(
     output: str = typer.Option("outputs", "-o", "--output", help="Output directory", rich_help_panel="Basic"),
     model_name: str = typer.Option("gpt-5-mini", "--model", help="Model used", rich_help_panel="Basic"),
     max_steps: int = typer.Option(100, "--max-steps", help="Maximum number of steps", rich_help_panel="Basic"),
+    baseline: bool = typer.Option(False, "--baseline", help="Use bash-only baseline agent", rich_help_panel="Basic"),
     # NOTE: provide any extra arguments if needed
 ) -> None:
     output_path = Path(output)
@@ -127,7 +147,7 @@ def main(
     # 20 workers = ~2x speedup, 30 workers = ~3x speedup (if you have resources)
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         futures = {
-            executor.submit(process_instance, instance, output_path, model_name, max_steps): instance[
+            executor.submit(process_instance, instance, output_path, model_name, max_steps, baseline): instance[
                 "instance_id"
             ]
             for instance in instances

@@ -1,0 +1,36 @@
+diff --git a/django/contrib/auth/__init__.py b/django/contrib/auth/__init__.py
+index 155330c596..856347f805 100644
+--- a/django/contrib/auth/__init__.py
++++ b/django/contrib/auth/__init__.py
+@@ -5,7 +5,7 @@ from django.apps import apps as django_apps
+ from django.conf import settings
+ from django.core.exceptions import ImproperlyConfigured, PermissionDenied
+ from django.middleware.csrf import rotate_token
+-from django.utils.crypto import constant_time_compare
++from django.utils.crypto import constant_time_compare, salted_hmac
+ from django.utils.module_loading import import_string
+ from django.views.decorators.debug import sensitive_variables
+ 
+@@ -196,11 +196,19 @@ def get_user(request):
+         if backend_path in settings.AUTHENTICATION_BACKENDS:
+             backend = load_backend(backend_path)
+             user = backend.get_user(user_id)
+-            # Verify the session
++            # Verify the session. Accept hashes generated with the current
++            # SECRET_KEY or any keys in SECRET_KEY_FALLBACKS.
+             if hasattr(user, "get_session_auth_hash"):
+                 session_hash = request.session.get(HASH_SESSION_KEY)
+-                session_hash_verified = session_hash and constant_time_compare(
+-                    session_hash, user.get_session_auth_hash()
++                session_hash_verified = session_hash and (
++                    constant_time_compare(session_hash, user.get_session_auth_hash())
++                    or any(
++                        constant_time_compare(
++                            session_hash,
++                            salted_hmac("django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash", user.password, secret=secret, algorithm="sha256").hexdigest(),
++                        )
++                        for secret in settings.SECRET_KEY_FALLBACKS or ()
++                    )
+                 )
+                 if not session_hash_verified:
+                     request.session.flush()

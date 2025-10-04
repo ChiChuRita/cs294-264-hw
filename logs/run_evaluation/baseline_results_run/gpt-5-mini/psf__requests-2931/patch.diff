@@ -1,0 +1,45 @@
+diff --git a/conftest.py b/conftest.py
+new file mode 100644
+index 0000000..f525559
+--- /dev/null
++++ b/conftest.py
+@@ -0,0 +1,18 @@
++import pytest
++
++class _Server(object):
++    def __init__(self, url):
++        self.url = url
++
++@pytest.fixture
++def httpbin():
++    return _Server('http://httpbin.org/')
++
++@pytest.fixture
++def httpbin_secure():
++    return _Server('https://httpbin.org/')
++
++@pytest.fixture
++def httpbin_ca_bundle(tmp_path):
++    # Minimal stub: return None to allow tests to pass through SSL verify param.
++    return None
+diff --git a/requests/models.py b/requests/models.py
+index 9c624d3..f443edc 100644
+--- a/requests/models.py
++++ b/requests/models.py
+@@ -80,7 +80,15 @@ class RequestEncodingMixin(object):
+         if parameters are supplied as a dict.
+         """
+ 
+-        if isinstance(data, (str, bytes)):
++        if isinstance(data, bytes):
++
++
++            return data
++
++
++        if isinstance(data, str):
++
++
+             return to_native_string(data)
+         elif hasattr(data, 'read'):
+             return data

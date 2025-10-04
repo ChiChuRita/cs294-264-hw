@@ -1,0 +1,53 @@
+2025-10-03 20:29:31,597 - INFO - Creating container for django__django-13297...
+2025-10-03 20:29:31,696 - INFO - Container for django__django-13297 created: 8c79f39c01d4fa403b77eb879687d51a451cfaa5eda344c618b5f46b8a273309
+2025-10-03 20:29:31,999 - INFO - Container for django__django-13297 started: 8c79f39c01d4fa403b77eb879687d51a451cfaa5eda344c618b5f46b8a273309
+2025-10-03 20:29:31,999 - INFO - Intermediate patch for django__django-13297 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/django__django-13297/patch.diff, now applying to container...
+2025-10-03 20:29:32,366 - INFO - >>>>> Applied Patch:
+Checking patch django/views/generic/base.py...
+Applied patch django/views/generic/base.py cleanly.
+
+2025-10-03 20:29:36,518 - INFO - Git diff before:
+diff --git a/django/views/generic/base.py b/django/views/generic/base.py
+index ea5baca08d..fd35555748 100644
+--- a/django/views/generic/base.py
++++ b/django/views/generic/base.py
+@@ -160,7 +160,13 @@ class TemplateView(TemplateResponseMixin, ContextMixin, View):
+         # RemovedInDjango40Warning: when the deprecation ends, replace with:
+         #   context = self.get_context_data()
+         context_kwargs = _wrap_url_kwargs_with_deprecation_warning(kwargs)
+-        context = self.get_context_data(**context_kwargs)
++        # Call get_context_data with the original kwargs so overriding code
++        # receives real (non-lazy) values.
++        context = self.get_context_data(**kwargs)
++        # Merge the lazily-wrapped URL kwargs into the context only if the
++        # view didn't provide an explicit value for that key.
++        for key, value in context_kwargs.items():
++            context.setdefault(key, value)
+         return self.render_to_response(context)
+2025-10-03 20:29:36,518 - INFO - Eval script for django__django-13297 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/django__django-13297/eval.sh; copying to container...
+2025-10-03 20:30:35,045 - INFO - Test runtime: 58.40 seconds
+2025-10-03 20:30:35,048 - INFO - Test output for django__django-13297 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/django__django-13297/test_output.txt
+2025-10-03 20:30:35,167 - INFO - Git diff after:
+diff --git a/django/views/generic/base.py b/django/views/generic/base.py
+index ea5baca08d..fd35555748 100644
+--- a/django/views/generic/base.py
++++ b/django/views/generic/base.py
+@@ -160,7 +160,13 @@ class TemplateView(TemplateResponseMixin, ContextMixin, View):
+         # RemovedInDjango40Warning: when the deprecation ends, replace with:
+         #   context = self.get_context_data()
+         context_kwargs = _wrap_url_kwargs_with_deprecation_warning(kwargs)
+-        context = self.get_context_data(**context_kwargs)
++        # Call get_context_data with the original kwargs so overriding code
++        # receives real (non-lazy) values.
++        context = self.get_context_data(**kwargs)
++        # Merge the lazily-wrapped URL kwargs into the context only if the
++        # view didn't provide an explicit value for that key.
++        for key, value in context_kwargs.items():
++            context.setdefault(key, value)
+         return self.render_to_response(context)
+2025-10-03 20:30:35,167 - INFO - Grading answer for django__django-13297...
+2025-10-03 20:30:35,169 - INFO - report: {'django__django-13297': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': ['test_template_params_filtering (generic_views.test_base.DeprecationTests)'], 'failure': []}, 'PASS_TO_PASS': {'success': ['test_get_context_data_super (generic_views.test_base.GetContextDataTest)', 'test_object_at_custom_name_in_context_data (generic_views.test_base.GetContextDataTest)', 'test_object_in_get_context_data (generic_views.test_base.GetContextDataTest)', 'test_overwrite_queryset (generic_views.test_base.UseMultipleObjectMixinTest)', 'test_use_queryset_from_view (generic_views.test_base.UseMultipleObjectMixinTest)', 'test_template_mixin_without_template (generic_views.test_base.SingleObjectTemplateResponseMixinTest)', 'test_args_kwargs_request_on_self (generic_views.test_base.ViewTest)', 'test_calling_more_than_once (generic_views.test_base.ViewTest)', 'test_class_attributes (generic_views.test_base.ViewTest)', 'test_direct_instantiation (generic_views.test_base.ViewTest)', 'test_dispatch_decoration (generic_views.test_base.ViewTest)', 'test_get_and_head (generic_views.test_base.ViewTest)', 'test_get_and_post (generic_views.test_base.ViewTest)', 'test_get_only (generic_views.test_base.ViewTest)', 'test_head_no_get (generic_views.test_base.ViewTest)', 'test_invalid_keyword_argument (generic_views.test_base.ViewTest)', 'test_no_init_args (generic_views.test_base.ViewTest)', 'test_no_init_kwargs (generic_views.test_base.ViewTest)', 'test_not_calling_parent_setup_error (generic_views.test_base.ViewTest)', 'test_options (generic_views.test_base.ViewTest)', 'test_options_for_get_and_post_view (generic_views.test_base.ViewTest)', 'test_options_for_get_view (generic_views.test_base.ViewTest)', 'test_options_for_post_view (generic_views.test_base.ViewTest)', 'test_overridden_setup (generic_views.test_base.ViewTest)', 'test_pathological_http_method (generic_views.test_base.ViewTest)', 'test_setup_adds_args_kwargs_request (generic_views.test_base.ViewTest)', 'test_setup_get_and_head (generic_views.test_base.ViewTest)', 'Default is a temporary redirect', 'test_direct_instantiation (generic_views.test_base.RedirectViewTest)', 'GET arguments can be included in the redirected URL', 'GET arguments can be URL-encoded when included in the redirected URL', 'Named pattern parameter should reverse to the matching pattern', 'test_named_url_pattern_using_args (generic_views.test_base.RedirectViewTest)', 'Without any configuration, returns HTTP 410 GONE', 'Redirection URLs can be parameterized', 'Permanent redirects are an option', 'regression for #16705', 'Temporary redirects are an option', 'A template view can be customized to return extra context.', 'A generic template view passes kwargs as context.', 'test_cached_views (generic_views.test_base.TemplateViewTest)', 'test_content_type (generic_views.test_base.TemplateViewTest)', 'test_extra_context (generic_views.test_base.TemplateViewTest)', 'test_get (generic_views.test_base.TemplateViewTest)', 'test_get_generic_template (generic_views.test_base.TemplateViewTest)', 'test_get_template_attribute (generic_views.test_base.TemplateViewTest)', 'test_head (generic_views.test_base.TemplateViewTest)', 'test_resolve_login_required_view (generic_views.test_base.TemplateViewTest)', 'test_resolve_view (generic_views.test_base.TemplateViewTest)', 'test_template_engine (generic_views.test_base.TemplateViewTest)', 'test_template_name_required (generic_views.test_base.TemplateViewTest)'], 'failure': ['test_template_params_warning (generic_views.test_base.DeprecationTests)']}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-13297: resolved: False
+2025-10-03 20:30:35,170 - INFO - Attempting to stop container sweb.eval.django__django-13297.baseline_results_run...
+2025-10-03 20:30:50,346 - INFO - Attempting to remove container sweb.eval.django__django-13297.baseline_results_run...
+2025-10-03 20:30:50,365 - INFO - Container sweb.eval.django__django-13297.baseline_results_run removed.

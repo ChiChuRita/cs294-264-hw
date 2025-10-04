@@ -1,0 +1,181 @@
+{
+  "info": {
+    "submission": "diff --git a/requests/models.py b/requests/models.py\nindex 9c624d3..a616f21 100644\n--- a/requests/models.py\n+++ b/requests/models.py\n@@ -80,10 +80,10 @@ class RequestEncodingMixin(object):\n         if parameters are supplied as a dict.\n         \"\"\"\n \n-        if isinstance(data, (str, bytes)):\n-            return to_native_string(data)\n-        elif hasattr(data, 'read'):\n+        if isinstance(data, bytes):\n             return data\n+        elif isinstance(data, str):\n+            return to_native_string(data)\n         elif hasattr(data, '__iter__'):\n             result = []\n             for k, vs in to_key_val_list(data):\n@@ -846,3 +846,4 @@ class Response(object):\n             return self.raw.close()\n \n         return self.raw.release_conn()\n+\n",
+    "config": {
+      "agent": "swe-react-agent",
+      "model": "gpt-5-mini"
+    }
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "",
+      "timestamp": 1759569813,
+      "unique_id": 0,
+      "parent": -1,
+      "children": [
+        1
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Request with binary payload fails due to calling to_native_string\nIntroduced with https://github.com/kennethreitz/requests/issues/2844\n\n```\nimport requests\nrequests.put(\"http://httpbin.org/put\", data=u\"\u00f6\u00f6\u00f6\".encode(\"utf-8\"))\n```\n\nThis works with 2.8.1, but not with 2.9.\n\n",
+      "timestamp": 1759569813,
+      "unique_id": 1,
+      "parent": 0,
+      "children": [
+        2
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I will search the codebase for occurrences of to_native_string and related symbols, then inspect and patch the minimal necessary lines to accept binary payloads. I'll start by locating references to to_native_string. \n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit grep -n \"to_native_string\" || true\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569817,
+      "unique_id": 2,
+      "parent": 1,
+      "children": [
+        3
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\nrequests/auth.py:20:from .utils import parse_dict_header, to_native_string\nrequests/auth.py:30:    authstr = 'Basic ' + to_native_string(\nrequests/models.py:30:    iter_slices, guess_json_utf, super_len, to_native_string)\nrequests/models.py:84:            return to_native_string(data)\nrequests/models.py:322:            self.method = to_native_string(self.method.upper())\nrequests/models.py:351:            error = error.format(to_native_string(url, 'utf8'))\nrequests/models.py:402:            self.headers = CaseInsensitiveDict((to_native_string(name), value) for name, value in headers.items())\nrequests/sessions.py:21:from .utils import to_key_val_list, default_headers, to_native_string\nrequests/sessions.py:138:            prepared_request.url = to_native_string(url)\nrequests/utils.py:686:def to_native_string(string, encoding='ascii'):\n",
+      "timestamp": 1759569819,
+      "unique_id": 3,
+      "parent": 2,
+      "children": [
+        4
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll inspect the utility and model code to find where binary payloads are being incorrectly converted, then make a minimal change to avoid converting bytes to native strings.\n\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba requests/utils.py | sed -n '650,760p'\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569826,
+      "unique_id": 4,
+      "parent": 3,
+      "children": [
+        5
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n   650\t    if nullcount == 3:\n   651\t        if sample[:3] == _null3:\n   652\t            return 'utf-32-be'\n   653\t        if sample[1:] == _null3:\n   654\t            return 'utf-32-le'\n   655\t        # Did not detect a valid UTF-32 ascii-range character\n   656\t    return None\n   657\t\n   658\t\n   659\tdef prepend_scheme_if_needed(url, new_scheme):\n   660\t    '''Given a URL that may or may not have a scheme, prepend the given scheme.\n   661\t    Does not replace a present scheme with the one provided as an argument.'''\n   662\t    scheme, netloc, path, params, query, fragment = urlparse(url, new_scheme)\n   663\t\n   664\t    # urlparse is a finicky beast, and sometimes decides that there isn't a\n   665\t    # netloc present. Assume that it's being over-cautious, and switch netloc\n   666\t    # and path if urlparse decided there was no netloc.\n   667\t    if not netloc:\n   668\t        netloc, path = path, netloc\n   669\t\n   670\t    return urlunparse((scheme, netloc, path, params, query, fragment))\n   671\t\n   672\t\n   673\tdef get_auth_from_url(url):\n   674\t    \"\"\"Given a url with authentication components, extract them into a tuple of\n   675\t    username,password.\"\"\"\n   676\t    parsed = urlparse(url)\n   677\t\n   678\t    try:\n   679\t        auth = (unquote(parsed.username), unquote(parsed.password))\n   680\t    except (AttributeError, TypeError):\n   681\t        auth = ('', '')\n   682\t\n   683\t    return auth\n   684\t\n   685\t\n   686\tdef to_native_string(string, encoding='ascii'):\n   687\t    \"\"\"\n   688\t    Given a string object, regardless of type, returns a representation of that\n   689\t    string in the native string type, encoding and decoding where necessary.\n   690\t    This assumes ASCII unless told otherwise.\n   691\t    \"\"\"\n   692\t    out = None\n   693\t\n   694\t    if isinstance(string, builtin_str):\n   695\t        out = string\n   696\t    else:\n   697\t        if is_py2:\n   698\t            out = string.encode(encoding)\n   699\t        else:\n   700\t            out = string.decode(encoding)\n   701\t\n   702\t    return out\n   703\t\n   704\t\n   705\tdef urldefragauth(url):\n   706\t    \"\"\"\n   707\t    Given a url remove the fragment and the authentication part\n   708\t    \"\"\"\n   709\t    scheme, netloc, path, params, query, fragment = urlparse(url)\n   710\t\n   711\t    # see func:`prepend_scheme_if_needed`\n   712\t    if not netloc:\n   713\t        netloc, path = path, netloc\n   714\t\n   715\t    netloc = netloc.rsplit('@', 1)[-1]\n   716\t\n   717\t    return urlunparse((scheme, netloc, path, params, query, ''))\n",
+      "timestamp": 1759569826,
+      "unique_id": 5,
+      "parent": 4,
+      "children": [
+        6
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll search for occurrences of to_native_string and inspect the relevant files, then make a minimal change to accept binary payloads. \n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba requests/models.py | sed -n '1,140p'\n----END_FUNCTION_CALL----END_FUNCTION_CALL----",
+      "timestamp": 1759569831,
+      "unique_id": 6,
+      "parent": 5,
+      "children": [
+        7
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n     1\t# -*- coding: utf-8 -*-\n     2\t\n     3\t\"\"\"\n     4\trequests.models\n     5\t~~~~~~~~~~~~~~~\n     6\t\n     7\tThis module contains the primary objects that power Requests.\n     8\t\"\"\"\n     9\t\n    10\timport collections\n    11\timport datetime\n    12\t\n    13\tfrom io import BytesIO, UnsupportedOperation\n    14\tfrom .hooks import default_hooks\n    15\tfrom .structures import CaseInsensitiveDict\n    16\t\n    17\tfrom .auth import HTTPBasicAuth\n    18\tfrom .cookies import cookiejar_from_dict, get_cookie_header, _copy_cookie_jar\n    19\tfrom .packages.urllib3.fields import RequestField\n    20\tfrom .packages.urllib3.filepost import encode_multipart_formdata\n    21\tfrom .packages.urllib3.util import parse_url\n    22\tfrom .packages.urllib3.exceptions import (\n    23\t    DecodeError, ReadTimeoutError, ProtocolError, LocationParseError)\n    24\tfrom .exceptions import (\n    25\t    HTTPError, MissingSchema, InvalidURL, ChunkedEncodingError,\n    26\t    ContentDecodingError, ConnectionError, StreamConsumedError)\n    27\tfrom .utils import (\n    28\t    guess_filename, get_auth_from_url, requote_uri,\n    29\t    stream_decode_response_unicode, to_key_val_list, parse_header_links,\n    30\t    iter_slices, guess_json_utf, super_len, to_native_string)\n    31\tfrom .compat import (\n    32\t    cookielib, urlunparse, urlsplit, urlencode, str, bytes, StringIO,\n    33\t    is_py2, chardet, builtin_str, basestring)\n    34\tfrom .compat import json as complexjson\n    35\tfrom .status_codes import codes\n    36\t\n    37\t#: The set of HTTP status codes that indicate an automatically\n    38\t#: processable redirect.\n    39\tREDIRECT_STATI = (\n    40\t    codes.moved,              # 301\n    41\t    codes.found,              # 302\n    42\t    codes.other,              # 303\n    43\t    codes.temporary_redirect, # 307\n    44\t    codes.permanent_redirect, # 308\n    45\t)\n    46\t\n    47\tDEFAULT_REDIRECT_LIMIT = 30\n    48\tCONTENT_CHUNK_SIZE = 10 * 1024\n    49\tITER_CHUNK_SIZE = 512\n    50\t\n    51\t\n    52\tclass RequestEncodingMixin(object):\n    53\t    @property\n    54\t    def path_url(self):\n    55\t        \"\"\"Build the path URL to use.\"\"\"\n    56\t\n    57\t        url = []\n    58\t\n    59\t        p = urlsplit(self.url)\n    60\t\n    61\t        path = p.path\n    62\t        if not path:\n    63\t            path = '/'\n    64\t\n    65\t        url.append(path)\n    66\t\n    67\t        query = p.query\n    68\t        if query:\n    69\t            url.append('?')\n    70\t            url.append(query)\n    71\t\n    72\t        return ''.join(url)\n    73\t\n    74\t    @staticmethod\n    75\t    def _encode_params(data):\n    76\t        \"\"\"Encode parameters in a piece of data.\n    77\t\n    78\t        Will successfully encode parameters when passed as a dict or a list of\n    79\t        2-tuples. Order is retained if data is a list of 2-tuples but arbitrary\n    80\t        if parameters are supplied as a dict.\n    81\t        \"\"\"\n    82\t\n    83\t        if isinstance(data, (str, bytes)):\n    84\t            return to_native_string(data)\n    85\t        elif hasattr(data, 'read'):\n    86\t            return data\n    87\t        elif hasattr(data, '__iter__'):\n    88\t            result = []\n    89\t            for k, vs in to_key_val_list(data):\n    90\t                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):\n    91\t                    vs = [vs]\n    92\t                for v in vs:\n    93\t                    if v is not None:\n    94\t                        result.append(\n    95\t                            (k.encode('utf-8') if isinstance(k, str) else k,\n    96\t                             v.encode('utf-8') if isinstance(v, str) else v))\n    97\t            return urlencode(result, doseq=True)\n    98\t        else:\n    99\t            return data\n   100\t\n   101\t    @staticmethod\n   102\t    def _encode_files(files, data):\n   103\t        \"\"\"Build the body for a multipart/form-data request.\n   104\t\n   105\t        Will successfully encode files when passed as a dict or a list of\n   106\t        2-tuples. Order is retained if data is a list of 2-tuples but arbitrary\n   107\t        if parameters are supplied as a dict.\n   108\t\n   109\t        \"\"\"\n   110\t        if (not files):\n   111\t            raise ValueError(\"Files must be provided.\")\n   112\t        elif isinstance(data, basestring):\n   113\t            raise ValueError(\"Data must not be a string.\")\n   114\t\n   115\t        new_fields = []\n   116\t        fields = to_key_val_list(data or {})\n   117\t        files = to_key_val_list(files or {})\n   118\t\n   119\t        for field, val in fields:\n   120\t            if isinstance(val, basestring) or not hasattr(val, '__iter__'):\n   121\t                val = [val]\n   122\t            for v in val:\n   123\t                if v is not None:\n   124\t                    # Don't call str() on bytestrings: in Py3 it all goes wrong.\n   125\t                    if not isinstance(v, bytes):\n   126\t                        v = str(v)\n   127\t\n   128\t                    new_fields.append(\n   129\t                        (field.decode('utf-8') if isinstance(field, bytes) else field,\n   130\t                         v.encode('utf-8') if isinstance(v, str) else v))\n   131\t\n   132\t        for (k, v) in files:\n   133\t            # support for explicit filename\n   134\t            ft = None\n   135\t            fh = None\n   136\t            if isinstance(v, (tuple, list)):\n   137\t                if len(v) == 2:\n   138\t                    fn, fp = v\n   139\t                elif len(v) == 3:\n   140\t                    fn, fp, ft = v\nbash: line 2: ----END_FUNCTION_CALL: command not found\n",
+      "timestamp": 1759569832,
+      "unique_id": 7,
+      "parent": 6,
+      "children": [
+        8
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I will update the file to avoid decoding byte strings in _encode_params so binary payloads are preserved.\n----BEGIN_FUNCTION_CALL----\nreplace_in_file\n----ARG----\nfile_path\nrequests/models.py\n----ARG----\nfrom_line\n83\n----ARG----\nto_line\n86\n----ARG----\ncontent\n        if isinstance(data, bytes):\n            return data\n        elif isinstance(data, str):\n            return to_native_string(data)\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569864,
+      "unique_id": 8,
+      "parent": 7,
+      "children": [
+        9
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\nReplaced lines 83-86 in requests/models.py",
+      "timestamp": 1759569867,
+      "unique_id": 9,
+      "parent": 8,
+      "children": [
+        10
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit status --porcelain && git --no-pager diff --unified=0 requests/models.py && sed -n '72,100p' requests/models.py\n----END_FUNCTION_CALL----END_FUNCTION_CALL----",
+      "timestamp": 1759569882,
+      "unique_id": 10,
+      "parent": 9,
+      "children": [
+        11
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n M requests/models.py\ndiff --git a/requests/models.py b/requests/models.py\nindex 9c624d3..a616f21 100644\n--- a/requests/models.py\n+++ b/requests/models.py\n@@ -83,3 +83 @@ class RequestEncodingMixin(object):\n-        if isinstance(data, (str, bytes)):\n-            return to_native_string(data)\n-        elif hasattr(data, 'read'):\n+        if isinstance(data, bytes):\n@@ -86,0 +85,2 @@ class RequestEncodingMixin(object):\n+        elif isinstance(data, str):\n+            return to_native_string(data)\n@@ -848,0 +849 @@ class Response(object):\n+\n        return ''.join(url)\n\n    @staticmethod\n    def _encode_params(data):\n        \"\"\"Encode parameters in a piece of data.\n\n        Will successfully encode parameters when passed as a dict or a list of\n        2-tuples. Order is retained if data is a list of 2-tuples but arbitrary\n        if parameters are supplied as a dict.\n        \"\"\"\n\n        if isinstance(data, bytes):\n            return data\n        elif isinstance(data, str):\n            return to_native_string(data)\n        elif hasattr(data, '__iter__'):\n            result = []\n            for k, vs in to_key_val_list(data):\n                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):\n                    vs = [vs]\n                for v in vs:\n                    if v is not None:\n                        result.append(\n                            (k.encode('utf-8') if isinstance(k, str) else k,\n                             v.encode('utf-8') if isinstance(v, str) else v))\n            return urlencode(result, doseq=True)\n        else:\n            return data\n\nbash: line 2: ----END_FUNCTION_CALL: command not found\n",
+      "timestamp": 1759569882,
+      "unique_id": 11,
+      "parent": 10,
+      "children": [
+        12
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\npython - <<'PY'\nimport requests\nfrom requests.models import RequestEncodingMixin\ndata = u\"\u00f6\u00f6\u00f6\".encode(\"utf-8\")\nres = RequestEncodingMixin._encode_params(data)\nprint(type(res))\nprint(res == data)\nprint(res)\nPY\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569908,
+      "unique_id": 12,
+      "parent": 11,
+      "children": [
+        13
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n<class 'bytes'>\nTrue\nb'\\xc3\\xb6\\xc3\\xb6\\xc3\\xb6'\n",
+      "timestamp": 1759569910,
+      "unique_id": 13,
+      "parent": 12,
+      "children": [
+        14
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Running validation: show git diff and run a quick Python check to ensure prepared request preserves bytes.\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit status --porcelain && git --no-pager diff --unified=0 requests/models.py && sed -n '72,100p' requests/models.py && python - <<'PY'\nimport requests\nfrom requests.models import Request\nfrom requests.sessions import Session\ndata = u\"\u00f6\u00f6\u00f6\".encode(\"utf-8\")\nreq = Request('PUT','http://example.com', data=data)\ns = Session()\npre = s.prepare_request(req)\nprint(\"prepared.body.type:\", type(pre.body))\nprint(\"prepared.body.equals:\", pre.body == data)\nprint(\"prepared.body.bytes:\", pre.body)\nPY\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569969,
+      "unique_id": 14,
+      "parent": 13,
+      "children": [
+        15
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n M requests/models.py\ndiff --git a/requests/models.py b/requests/models.py\nindex 9c624d3..a616f21 100644\n--- a/requests/models.py\n+++ b/requests/models.py\n@@ -83,3 +83 @@ class RequestEncodingMixin(object):\n-        if isinstance(data, (str, bytes)):\n-            return to_native_string(data)\n-        elif hasattr(data, 'read'):\n+        if isinstance(data, bytes):\n@@ -86,0 +85,2 @@ class RequestEncodingMixin(object):\n+        elif isinstance(data, str):\n+            return to_native_string(data)\n@@ -848,0 +849 @@ class Response(object):\n+\n        return ''.join(url)\n\n    @staticmethod\n    def _encode_params(data):\n        \"\"\"Encode parameters in a piece of data.\n\n        Will successfully encode parameters when passed as a dict or a list of\n        2-tuples. Order is retained if data is a list of 2-tuples but arbitrary\n        if parameters are supplied as a dict.\n        \"\"\"\n\n        if isinstance(data, bytes):\n            return data\n        elif isinstance(data, str):\n            return to_native_string(data)\n        elif hasattr(data, '__iter__'):\n            result = []\n            for k, vs in to_key_val_list(data):\n                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):\n                    vs = [vs]\n                for v in vs:\n                    if v is not None:\n                        result.append(\n                            (k.encode('utf-8') if isinstance(k, str) else k,\n                             v.encode('utf-8') if isinstance(v, str) else v))\n            return urlencode(result, doseq=True)\n        else:\n            return data\n\nprepared.body.type: <class 'bytes'>\nprepared.body.equals: True\nprepared.body.bytes: b'\\xc3\\xb6\\xc3\\xb6\\xc3\\xb6'\n",
+      "timestamp": 1759569970,
+      "unique_id": 15,
+      "parent": 14,
+      "children": [
+        16
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Made a minimal change: RequestEncodingMixin._encode_params now returns bytes unchanged and only calls to_native_string for str, preserving binary request bodies (fixes regression when passing bytes payloads).\n\n----BEGIN_FUNCTION_CALL----\nfinish\n----ARG----\nresult\nReturn bytes unchanged in RequestEncodingMixin._encode_params (requests/models.py) so binary request bodies aren't decoded via to_native_string; fixes failing binary payloads (e.g. u\"\u00f6\u00f6\u00f6\".encode(\"utf-8\")).\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569982,
+      "unique_id": 16,
+      "parent": 15,
+      "children": []
+    }
+  ],
+  "trajectory_format": "mini-swe-agent-1",
+  "instance_id": "psf__requests-2931"
+}

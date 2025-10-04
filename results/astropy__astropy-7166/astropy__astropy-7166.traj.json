@@ -1,0 +1,221 @@
+{
+  "info": {
+    "submission": "diff --git a/astropy/utils/misc.py b/astropy/utils/misc.py\nindex de3fb01d1..9a0fe6fce 100644\n--- a/astropy/utils/misc.py\n+++ b/astropy/utils/misc.py\n@@ -528,7 +528,7 @@ class InheritDocstrings(type):\n                 not key.startswith('_'))\n \n         for key, val in dct.items():\n-            if (inspect.isfunction(val) and\n+            if ((inspect.isfunction(val) or isinstance(val, property)) and\n                 is_public_member(key) and\n                 val.__doc__ is None):\n                 for base in cls.__mro__[1:]:\n@@ -1127,3 +1127,4 @@ def dtype_bytes_or_chars(dtype):\n     match = re.search(r'(\\d+)$', dtype.str)\n     out = int(match.group(1)) if match else None\n     return out\n+\n",
+    "config": {
+      "agent": "swe-react-agent",
+      "model": "gpt-5-mini"
+    }
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "",
+      "timestamp": 1759569813,
+      "unique_id": 0,
+      "parent": -1,
+      "children": [
+        1
+      ]
+    },
+    {
+      "role": "user",
+      "content": "InheritDocstrings metaclass doesn't work for properties\nInside the InheritDocstrings metaclass it uses `inspect.isfunction` which returns `False` for properties.\n",
+      "timestamp": 1759569813,
+      "unique_id": 1,
+      "parent": 0,
+      "children": [
+        2
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll start searching the repository for the InheritDocstrings metaclass and related code to inspect and fix it. I'll run commands to locate the file, open the relevant lines, make a minimal edit to also detect properties (using inspect.isroutine or isinstance(obj, property)), and then run tests focusing on relevant tests if they exist. I'll proceed now.\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit grep -n \"InheritDocstrings\" || true\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569818,
+      "unique_id": 2,
+      "parent": 1,
+      "children": [
+        3
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\nastropy/config/configuration.py:23:from ..utils.misc import InheritDocstrings\nastropy/config/configuration.py:160:class ConfigItem(metaclass=InheritDocstrings):\nastropy/constants/constant.py:12:from ..utils.misc import InheritDocstrings\nastropy/constants/constant.py:17:class ConstantMeta(InheritDocstrings):\nastropy/coordinates/representation.py:24:from ..utils.misc import InheritDocstrings\nastropy/coordinates/representation.py:427:class MetaBaseRepresentation(InheritDocstrings, abc.ABCMeta):\nastropy/coordinates/representation.py:1934:class MetaBaseDifferential(InheritDocstrings, abc.ABCMeta):\nastropy/io/votable/tree.py:24:from ...utils.misc import InheritDocstrings\nastropy/io/votable/tree.py:406:class Element(metaclass=InheritDocstrings):\nastropy/modeling/core.py:39:                     InheritDocstrings, OrderedDescriptorContainer,\nastropy/modeling/core.py:78:class _ModelMeta(OrderedDescriptorContainer, InheritDocstrings, abc.ABCMeta):\nastropy/units/core.py:18:from ..utils.misc import isiterable, InheritDocstrings\nastropy/units/core.py:486:class UnitBase(metaclass=InheritDocstrings):\nastropy/units/core.py:1730:class _UnitMetaClass(InheritDocstrings):\nastropy/units/format/base.py:2:from ...utils.misc import InheritDocstrings\nastropy/units/format/base.py:5:class _FormatterMeta(InheritDocstrings):\nastropy/units/quantity.py:26:from ..utils.misc import isiterable, InheritDocstrings\nastropy/units/quantity.py:200:class Quantity(np.ndarray, metaclass=InheritDocstrings):\nastropy/utils/misc.py:33:           'JsonCustomEncoder', 'indent', 'InheritDocstrings',\nastropy/utils/misc.py:497:class InheritDocstrings(type):\nastropy/utils/misc.py:511:        >>> from astropy.utils.misc import InheritDocstrings\nastropy/utils/misc.py:512:        >>> class A(metaclass=InheritDocstrings):\nastropy/utils/tests/test_misc.py:78:    class Base(metaclass=misc.InheritDocstrings):\nastropy/visualization/interval.py:12:from ..utils.misc import InheritDocstrings\nastropy/visualization/interval.py:21:class BaseInterval(BaseTransform, metaclass=InheritDocstrings):\nastropy/visualization/stretch.py:11:from ..utils.misc import InheritDocstrings\nastropy/visualization/stretch.py:47:class BaseStretch(BaseTransform, metaclass=InheritDocstrings):\n",
+      "timestamp": 1759569819,
+      "unique_id": 3,
+      "parent": 2,
+      "children": [
+        4
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll inspect the InheritDocstrings implementation to locate and modify the isfunction check to also handle properties.\n\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba astropy/utils/misc.py | sed -n '450,560p'\n----END_FUNCTION_CALL----END_FUNCTION_CALL----",
+      "timestamp": 1759569825,
+      "unique_id": 4,
+      "parent": 3,
+      "children": [
+        5
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n   450\t    \"\"\"\n   451\t    if isinstance(s, str):\n   452\t        s = strip_accents(s)\n   453\t    s_lower = s.lower()\n   454\t\n   455\t    # Create a mapping from the lower case name to all capitalization\n   456\t    # variants of that name.\n   457\t    candidates_lower = {}\n   458\t    for candidate in candidates:\n   459\t        candidate_lower = candidate.lower()\n   460\t        candidates_lower.setdefault(candidate_lower, [])\n   461\t        candidates_lower[candidate_lower].append(candidate)\n   462\t\n   463\t    # The heuristic here is to first try \"singularizing\" the word.  If\n   464\t    # that doesn't match anything use difflib to find close matches in\n   465\t    # original, lower and upper case.\n   466\t    if s_lower.endswith('s') and s_lower[:-1] in candidates_lower:\n   467\t        matches = [s_lower[:-1]]\n   468\t    else:\n   469\t        matches = difflib.get_close_matches(\n   470\t            s_lower, candidates_lower, n=n, cutoff=cutoff)\n   471\t\n   472\t    if len(matches):\n   473\t        capitalized_matches = set()\n   474\t        for match in matches:\n   475\t            capitalized_matches.update(candidates_lower[match])\n   476\t        matches = capitalized_matches\n   477\t\n   478\t        if fix is not None:\n   479\t            mapped_matches = []\n   480\t            for match in matches:\n   481\t                mapped_matches.extend(fix(match))\n   482\t            matches = mapped_matches\n   483\t\n   484\t        matches = list(set(matches))\n   485\t        matches = sorted(matches)\n   486\t\n   487\t        if len(matches) == 1:\n   488\t            matches = matches[0]\n   489\t        else:\n   490\t            matches = (', '.join(matches[:-1]) + ' or ' +\n   491\t                       matches[-1])\n   492\t        return 'Did you mean {0}?'.format(matches)\n   493\t\n   494\t    return ''\n   495\t\n   496\t\n   497\tclass InheritDocstrings(type):\n   498\t    \"\"\"\n   499\t    This metaclass makes methods of a class automatically have their\n   500\t    docstrings filled in from the methods they override in the base\n   501\t    class.\n   502\t\n   503\t    If the class uses multiple inheritance, the docstring will be\n   504\t    chosen from the first class in the bases list, in the same way as\n   505\t    methods are normally resolved in Python.  If this results in\n   506\t    selecting the wrong docstring, the docstring will need to be\n   507\t    explicitly included on the method.\n   508\t\n   509\t    For example::\n   510\t\n   511\t        >>> from astropy.utils.misc import InheritDocstrings\n   512\t        >>> class A(metaclass=InheritDocstrings):\n   513\t        ...     def wiggle(self):\n   514\t        ...         \"Wiggle the thingamajig\"\n   515\t        ...         pass\n   516\t        >>> class B(A):\n   517\t        ...     def wiggle(self):\n   518\t        ...         pass\n   519\t        >>> B.wiggle.__doc__\n   520\t        u'Wiggle the thingamajig'\n   521\t    \"\"\"\n   522\t\n   523\t    def __init__(cls, name, bases, dct):\n   524\t        def is_public_member(key):\n   525\t            return (\n   526\t                (key.startswith('__') and key.endswith('__')\n   527\t                 and len(key) > 4) or\n   528\t                not key.startswith('_'))\n   529\t\n   530\t        for key, val in dct.items():\n   531\t            if (inspect.isfunction(val) and\n   532\t                is_public_member(key) and\n   533\t                val.__doc__ is None):\n   534\t                for base in cls.__mro__[1:]:\n   535\t                    super_method = getattr(base, key, None)\n   536\t                    if super_method is not None:\n   537\t                        val.__doc__ = super_method.__doc__\n   538\t                        break\n   539\t\n   540\t        super().__init__(name, bases, dct)\n   541\t\n   542\t\n   543\tclass OrderedDescriptor(metaclass=abc.ABCMeta):\n   544\t    \"\"\"\n   545\t    Base class for descriptors whose order in the class body should be\n   546\t    preserved.  Intended for use in concert with the\n   547\t    `OrderedDescriptorContainer` metaclass.\n   548\t\n   549\t    Subclasses of `OrderedDescriptor` must define a value for a class attribute\n   550\t    called ``_class_attribute_``.  This is the name of a class attribute on the\n   551\t    *container* class for these descriptors, which will be set to an\n   552\t    `~collections.OrderedDict` at class creation time.  This\n   553\t    `~collections.OrderedDict` will contain a mapping of all class attributes\n   554\t    that were assigned instances of the `OrderedDescriptor` subclass, to the\n   555\t    instances themselves.  See the documentation for\n   556\t    `OrderedDescriptorContainer` for a concrete example.\n   557\t\n   558\t    Optionally, subclasses of `OrderedDescriptor` may define a value for a\n   559\t    class attribute called ``_name_attribute_``.  This should be the name of\n   560\t    an attribute on instances of the subclass.  When specified, during\nbash: line 2: ----END_FUNCTION_CALL: command not found\n",
+      "timestamp": 1759569825,
+      "unique_id": 5,
+      "parent": 4,
+      "children": [
+        6
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll inspect the relevant lines to make the minimal change.\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba astropy/utils/misc.py | sed -n '520,540p'\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569847,
+      "unique_id": 6,
+      "parent": 5,
+      "children": [
+        7
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n   520\t        u'Wiggle the thingamajig'\n   521\t    \"\"\"\n   522\t\n   523\t    def __init__(cls, name, bases, dct):\n   524\t        def is_public_member(key):\n   525\t            return (\n   526\t                (key.startswith('__') and key.endswith('__')\n   527\t                 and len(key) > 4) or\n   528\t                not key.startswith('_'))\n   529\t\n   530\t        for key, val in dct.items():\n   531\t            if (inspect.isfunction(val) and\n   532\t                is_public_member(key) and\n   533\t                val.__doc__ is None):\n   534\t                for base in cls.__mro__[1:]:\n   535\t                    super_method = getattr(base, key, None)\n   536\t                    if super_method is not None:\n   537\t                        val.__doc__ = super_method.__doc__\n   538\t                        break\n   539\t\n   540\t        super().__init__(name, bases, dct)\n",
+      "timestamp": 1759569848,
+      "unique_id": 7,
+      "parent": 6,
+      "children": [
+        8
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll inspect the InheritDocstrings implementation and tests, then make a minimal change to also handle properties.\n\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba astropy/utils/tests/test_misc.py | sed -n '1,240p'\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569861,
+      "unique_id": 8,
+      "parent": 7,
+      "children": [
+        9
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n     1\t# Licensed under a 3-clause BSD style license - see LICENSE.rst\n     2\t\n     3\timport json\n     4\timport os\n     5\tfrom datetime import datetime\n     6\timport locale\n     7\t\n     8\timport pytest\n     9\timport numpy as np\n    10\t\n    11\tfrom .. import data, misc\n    12\t\n    13\t\n    14\tdef test_isiterable():\n    15\t    assert misc.isiterable(2) is False\n    16\t    assert misc.isiterable([2]) is True\n    17\t    assert misc.isiterable([1, 2, 3]) is True\n    18\t    assert misc.isiterable(np.array(2)) is False\n    19\t    assert misc.isiterable(np.array([1, 2, 3])) is True\n    20\t\n    21\t\n    22\tdef test_signal_number_to_name_no_failure():\n    23\t    # Regression test for #5340: ensure signal_number_to_name throws no\n    24\t    # AttributeError (it used \".iteritems()\" which was removed in Python3).\n    25\t    misc.signal_number_to_name(0)\n    26\t\n    27\t\n    28\t@pytest.mark.remote_data\n    29\tdef test_api_lookup():\n    30\t    strurl = misc.find_api_page('astropy.utils.misc', 'dev', False, timeout=3)\n    31\t    objurl = misc.find_api_page(misc, 'dev', False, timeout=3)\n    32\t\n    33\t    assert strurl == objurl\n    34\t    assert strurl == 'http://devdocs.astropy.org/utils/index.html#module-astropy.utils.misc'\n    35\t\n    36\t\n    37\tdef test_skip_hidden():\n    38\t    path = data._find_pkg_data_path('data')\n    39\t    for root, dirs, files in os.walk(path):\n    40\t        assert '.hidden_file.txt' in files\n    41\t        assert 'local.dat' in files\n    42\t        # break after the first level since the data dir contains some other\n    43\t        # subdirectories that don't have these files\n    44\t        break\n    45\t\n    46\t    for root, dirs, files in misc.walk_skip_hidden(path):\n    47\t        assert '.hidden_file.txt' not in files\n    48\t        assert 'local.dat' in files\n    49\t        break\n    50\t\n    51\t\n    52\tdef test_JsonCustomEncoder():\n    53\t    from ... import units as u\n    54\t    assert json.dumps(np.arange(3), cls=misc.JsonCustomEncoder) == '[0, 1, 2]'\n    55\t    assert json.dumps(1+2j, cls=misc.JsonCustomEncoder) == '[1.0, 2.0]'\n    56\t    assert json.dumps(set([1, 2, 1]), cls=misc.JsonCustomEncoder) == '[1, 2]'\n    57\t    assert json.dumps(b'hello world \\xc3\\x85',\n    58\t                      cls=misc.JsonCustomEncoder) == '\"hello world \\\\u00c5\"'\n    59\t    assert json.dumps({1: 2},\n    60\t                      cls=misc.JsonCustomEncoder) == '{\"1\": 2}'  # default\n    61\t    assert json.dumps({1: u.m}, cls=misc.JsonCustomEncoder) == '{\"1\": \"m\"}'\n    62\t    # Quantities\n    63\t    tmp = json.dumps({'a': 5*u.cm}, cls=misc.JsonCustomEncoder)\n    64\t    newd = json.loads(tmp)\n    65\t    tmpd = {\"a\": {\"unit\": \"cm\", \"value\": 5.0}}\n    66\t    assert newd == tmpd\n    67\t    tmp2 = json.dumps({'a': np.arange(2)*u.cm}, cls=misc.JsonCustomEncoder)\n    68\t    newd = json.loads(tmp2)\n    69\t    tmpd = {\"a\": {\"unit\": \"cm\", \"value\": [0., 1.]}}\n    70\t    assert newd == tmpd\n    71\t    tmp3 = json.dumps({'a': np.arange(2)*u.erg/u.s}, cls=misc.JsonCustomEncoder)\n    72\t    newd = json.loads(tmp3)\n    73\t    tmpd = {\"a\": {\"unit\": \"erg / s\", \"value\": [0., 1.]}}\n    74\t    assert newd == tmpd\n    75\t\n    76\t\n    77\tdef test_inherit_docstrings():\n    78\t    class Base(metaclass=misc.InheritDocstrings):\n    79\t        def __call__(self, *args):\n    80\t            \"FOO\"\n    81\t            pass\n    82\t\n    83\t    class Subclass(Base):\n    84\t        def __call__(self, *args):\n    85\t            pass\n    86\t\n    87\t    if Base.__call__.__doc__ is not None:\n    88\t        # TODO: Maybe if __doc__ is None this test should be skipped instead?\n    89\t        assert Subclass.__call__.__doc__ == \"FOO\"\n    90\t\n    91\t\n    92\tdef test_set_locale():\n    93\t    # First, test if the required locales are available\n    94\t    current = locale.setlocale(locale.LC_ALL)\n    95\t    try:\n    96\t        locale.setlocale(locale.LC_ALL, str('en_US'))\n    97\t        locale.setlocale(locale.LC_ALL, str('de_DE'))\n    98\t    except locale.Error as e:\n    99\t        pytest.skip('Locale error: {}'.format(e))\n   100\t    finally:\n   101\t        locale.setlocale(locale.LC_ALL, current)\n   102\t\n   103\t    date = datetime(2000, 10, 1, 0, 0, 0)\n   104\t    day_mon = date.strftime('%a, %b')\n   105\t\n   106\t    with misc.set_locale('en_US'):\n   107\t        assert date.strftime('%a, %b') == 'Sun, Oct'\n   108\t\n   109\t    with misc.set_locale('de_DE'):\n   110\t        assert date.strftime('%a, %b') == 'So, Okt'\n   111\t\n   112\t    # Back to original\n   113\t    assert date.strftime('%a, %b') == day_mon\n   114\t\n   115\t    with misc.set_locale(current):\n   116\t        assert date.strftime('%a, %b') == day_mon\n   117\t\n   118\t\n   119\tdef test_check_broadcast():\n   120\t    assert misc.check_broadcast((10, 1), (3,)) == (10, 3)\n   121\t    assert misc.check_broadcast((10, 1), (3,), (4, 1, 1, 3)) == (4, 1, 10, 3)\n   122\t    with pytest.raises(ValueError):\n   123\t        misc.check_broadcast((10, 2), (3,))\n   124\t\n   125\t    with pytest.raises(ValueError):\n   126\t        misc.check_broadcast((10, 1), (3,), (4, 1, 2, 3))\n   127\t\n   128\t\n   129\tdef test_dtype_bytes_or_chars():\n   130\t    assert misc.dtype_bytes_or_chars(np.dtype(np.float64)) == 8\n   131\t    assert misc.dtype_bytes_or_chars(np.dtype(object)) is None\n   132\t    assert misc.dtype_bytes_or_chars(np.dtype(np.int32)) == 4\n   133\t    assert misc.dtype_bytes_or_chars(np.array(b'12345').dtype) == 5\n   134\t    assert misc.dtype_bytes_or_chars(np.array(u'12345').dtype) == 5\n",
+      "timestamp": 1759569862,
+      "unique_id": 9,
+      "parent": 8,
+      "children": [
+        10
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll proceed to inspect the file and apply the minimal change. \n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\nnl -ba astropy/utils/misc.py | sed -n '520,542p'\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569914,
+      "unique_id": 10,
+      "parent": 9,
+      "children": [
+        11
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n   520\t        u'Wiggle the thingamajig'\n   521\t    \"\"\"\n   522\t\n   523\t    def __init__(cls, name, bases, dct):\n   524\t        def is_public_member(key):\n   525\t            return (\n   526\t                (key.startswith('__') and key.endswith('__')\n   527\t                 and len(key) > 4) or\n   528\t                not key.startswith('_'))\n   529\t\n   530\t        for key, val in dct.items():\n   531\t            if (inspect.isfunction(val) and\n   532\t                is_public_member(key) and\n   533\t                val.__doc__ is None):\n   534\t                for base in cls.__mro__[1:]:\n   535\t                    super_method = getattr(base, key, None)\n   536\t                    if super_method is not None:\n   537\t                        val.__doc__ = super_method.__doc__\n   538\t                        break\n   539\t\n   540\t        super().__init__(name, bases, dct)\n   541\t\n   542\t\n",
+      "timestamp": 1759569914,
+      "unique_id": 11,
+      "parent": 10,
+      "children": [
+        12
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit apply -p0 <<'PATCH'\n*** Begin Patch\n*** Update File: astropy/utils/misc.py\n@@\n-        for key, val in dct.items():\n-            if (inspect.isfunction(val) and\n-                is_public_member(key) and\n-                val.__doc__ is None):\n+        for key, val in dct.items():\n+            if ((inspect.isfunction(val) or isinstance(val, property)) and\n+                is_public_member(key) and\n+                val.__doc__ is None):\n                 for base in cls.__mro__[1:]:\n                     super_method = getattr(base, key, None)\n                     if super_method is not None:\n                         val.__doc__ = super_method.__doc__\n                         break\n*** End Patch\nPATCH\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569950,
+      "unique_id": 12,
+      "parent": 11,
+      "children": [
+        13
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\nerror: unrecognized input\n",
+      "timestamp": 1759569951,
+      "unique_id": 13,
+      "parent": 12,
+      "children": [
+        14
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll run a quick check to see whether property objects allow assigning to __doc__, then make a minimal code change.\n\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\npython - <<'PY'\nclass A:\n    @property\n    def x(self):\n        \"doc\"\n        return 1\np = A.__dict__['x']\nprint(type(p), repr(p.__doc__))\ntry:\n    p.__doc__ = \"newdoc\"\n    print(\"set ok\", repr(p.__doc__))\nexcept Exception as e:\n    print(\"error:\", type(e).__name__, e)\nPY\n----END_FUNCTION_CALL----",
+      "timestamp": 1759569968,
+      "unique_id": 14,
+      "parent": 13,
+      "children": [
+        15
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n<class 'property'> 'doc'\nset ok 'newdoc'\n",
+      "timestamp": 1759569969,
+      "unique_id": 15,
+      "parent": 14,
+      "children": [
+        16
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll make the small change to treat properties like functions in InheritDocstrings.\n\n----BEGIN_FUNCTION_CALL----\nreplace_in_file\n----ARG----\nfile_path\nastropy/utils/misc.py\n----ARG----\nfrom_line\n523\n----ARG----\nto_line\n540\n----ARG----\ncontent\n    def __init__(cls, name, bases, dct):\n        def is_public_member(key):\n            return (\n                (key.startswith('__') and key.endswith('__')\n                 and len(key) > 4) or\n                not key.startswith('_'))\n\n        for key, val in dct.items():\n            if ((inspect.isfunction(val) or isinstance(val, property)) and\n                is_public_member(key) and\n                val.__doc__ is None):\n                for base in cls.__mro__[1:]:\n                    super_method = getattr(base, key, None)\n                    if super_method is not None:\n                        val.__doc__ = super_method.__doc__\n                        break\n\n        super().__init__(name, bases, dct)\n----END_FUNCTION_CALL----",
+      "timestamp": 1759570005,
+      "unique_id": 16,
+      "parent": 15,
+      "children": [
+        17
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\nReplaced lines 523-540 in astropy/utils/misc.py",
+      "timestamp": 1759570008,
+      "unique_id": 17,
+      "parent": 16,
+      "children": [
+        18
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "I'll run the verification commands (git status/diff, show the edited span, and run the focused test).\n\n----BEGIN_FUNCTION_CALL----\nrun_bash_cmd\n----ARG----\ncommand\ngit status --porcelain ; git --no-pager diff --unified=0 astropy/utils/misc.py ; sed -n '523,540p' astropy/utils/misc.py ; echo '---TEST---' ; pytest -q astropy/utils/tests/test_misc.py::test_inherit_docstrings || true\n----END_FUNCTION_CALL----",
+      "timestamp": 1759570065,
+      "unique_id": 18,
+      "parent": 17,
+      "children": [
+        19
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Result:\n M astropy/utils/misc.py\ndiff --git a/astropy/utils/misc.py b/astropy/utils/misc.py\nindex de3fb01d1..9a0fe6fce 100644\n--- a/astropy/utils/misc.py\n+++ b/astropy/utils/misc.py\n@@ -531 +531 @@ class InheritDocstrings(type):\n-            if (inspect.isfunction(val) and\n+            if ((inspect.isfunction(val) or isinstance(val, property)) and\n@@ -1129,0 +1130 @@ def dtype_bytes_or_chars(dtype):\n+\n    def __init__(cls, name, bases, dct):\n        def is_public_member(key):\n            return (\n                (key.startswith('__') and key.endswith('__')\n                 and len(key) > 4) or\n                not key.startswith('_'))\n\n        for key, val in dct.items():\n            if ((inspect.isfunction(val) or isinstance(val, property)) and\n                is_public_member(key) and\n                val.__doc__ is None):\n                for base in cls.__mro__[1:]:\n                    super_method = getattr(base, key, None)\n                    if super_method is not None:\n                        val.__doc__ = super_method.__doc__\n                        break\n\n        super().__init__(name, bases, dct)\n---TEST---\n.                                                                        [100%]\n=============================== warnings summary ===============================\nNone\n  Module already imported so cannot be rewritten: astropy.tests.plugins.display\n\n-- Docs: http://doc.pytest.org/en/latest/warnings.html\n1 passed, 1 warnings in 0.16 seconds\n",
+      "timestamp": 1759570069,
+      "unique_id": 19,
+      "parent": 18,
+      "children": [
+        20
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Fixed InheritDocstrings to also inherit docstrings for properties (check isinstance(val, property) in addition to inspect.isfunction).\n\n----BEGIN_FUNCTION_CALL----\nfinish\n----ARG----\nresult\nUpdated InheritDocstrings to include properties by checking isinstance(val, property) alongside inspect.isfunction so property docstrings are inherited.\n----END_FUNCTION_CALL----",
+      "timestamp": 1759570081,
+      "unique_id": 20,
+      "parent": 19,
+      "children": []
+    }
+  ],
+  "trajectory_format": "mini-swe-agent-1",
+  "instance_id": "astropy__astropy-7166"
+}

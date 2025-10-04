@@ -1,0 +1,22 @@
+diff --git a/sklearn/compose/_column_transformer.py b/sklearn/compose/_column_transformer.py
+index 4eddd12b1..7f28a5f42 100644
+--- a/sklearn/compose/_column_transformer.py
++++ b/sklearn/compose/_column_transformer.py
+@@ -293,6 +293,7 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+             Estimator instance.
+         """
+         super().set_output(transform=transform)
++        # Set output on all specified transformers and on the fitted ones.
+         transformers = (
+             trans
+             for _, trans, _ in chain(
+@@ -302,6 +303,9 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+         )
+         for trans in transformers:
+             _safe_set_output(trans, transform=transform)
++        # Also configure the remainder estimator if it is an estimator.
++        if getattr(self, "remainder", None) not in (None, "passthrough", "drop"):
++            _safe_set_output(self.remainder, transform=transform)
+ 
+         return self
+ 

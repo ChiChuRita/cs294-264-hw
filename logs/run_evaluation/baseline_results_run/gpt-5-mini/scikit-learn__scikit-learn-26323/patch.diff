@@ -1,0 +1,17 @@
+diff --git a/sklearn/compose/_column_transformer.py b/sklearn/compose/_column_transformer.py
+index 4eddd12b1..a189fa22f 100644
+--- a/sklearn/compose/_column_transformer.py
++++ b/sklearn/compose/_column_transformer.py
+@@ -303,6 +303,12 @@ class ColumnTransformer(TransformerMixin, _BaseComposition):
+         for trans in transformers:
+             _safe_set_output(trans, transform=transform)
+ 
++        
++        # If set_output is called before fitting, the remainder estimator
++        # (stored in self.remainder) is not part of self.transformers
++        # and so must be configured explicitly.
++        if self.remainder not in {'passthrough', 'drop'}:
++            _safe_set_output(self.remainder, transform=transform)
+         return self
+ 
+     def get_params(self, deep=True):

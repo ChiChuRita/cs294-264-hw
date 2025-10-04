@@ -36,24 +36,34 @@ class OpenAIModel(LLM):
         self.reasoning_effort = reasoning_effort
 
     def generate(self, prompt: str) -> str:
-        # Call the model and obtain text, ensuring the stop token is present
+        # Call the model (Responses API) with explicit reasoning effort
         try:
-            kwargs = {
-                "model": self.model_name,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            # Only attach reasoning for reasoning-capable models (o3/o4 families)
-            if self.reasoning_effort and any(k in self.model_name.lower() for k in ("o3", "o4")):
-                kwargs["reasoning"] = {"effort": self.reasoning_effort}
-            response = self.client.chat.completions.create(**kwargs)
-            
-            generated_text = response.choices[0].message.content
-            
+            response = self.client.responses.create(
+                model=self.model_name,
+                input=prompt,
+                reasoning={"effort": self.reasoning_effort or "medium"},
+            )
+
+            # Prefer output_text helper if available
+            generated_text = getattr(response, "output_text", None)
+            if not generated_text:
+                # Fallback: best-effort extraction from the structured output
+                try:
+                    parts = []
+                    for item in getattr(response, "output", []) or []:
+                        for seg in getattr(item, "content", []) or []:
+                            text = getattr(seg, "text", None)
+                            if text:
+                                parts.append(text)
+                    generated_text = "".join(parts) if parts else str(response)
+                except Exception:
+                    generated_text = str(response)
+
             # Ensure the stop token is present at the end if not already there
-            if not generated_text.endswith(self.stop_token):
+            if self.stop_token and not generated_text.endswith(self.stop_token):
                 generated_text += self.stop_token
-                
+
             return generated_text
-            
+
         except Exception as e:
             raise RuntimeError(f"Failed to generate response from OpenAI: {str(e)}")

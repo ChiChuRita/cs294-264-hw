@@ -1,0 +1,45 @@
+2025-10-03 19:41:19,122 - INFO - Creating container for django__django-14011...
+2025-10-03 19:41:19,336 - INFO - Container for django__django-14011 created: acc88b7c9f0e9fa6ed1f75fe298be8439a74cae513c393410f8c5d83e2fd4d38
+2025-10-03 19:41:19,807 - INFO - Container for django__django-14011 started: acc88b7c9f0e9fa6ed1f75fe298be8439a74cae513c393410f8c5d83e2fd4d38
+2025-10-03 19:41:19,808 - INFO - Intermediate patch for django__django-14011 written to logs/run_evaluation/best_run/gpt-5-mini/django__django-14011/patch.diff, now applying to container...
+2025-10-03 19:41:20,043 - INFO - >>>>> Applied Patch:
+Checking patch django/core/servers/basehttp.py...
+Applied patch django/core/servers/basehttp.py cleanly.
+
+2025-10-03 19:41:24,098 - INFO - Git diff before:
+diff --git a/django/core/servers/basehttp.py b/django/core/servers/basehttp.py
+index 14dab517c9..6758440afd 100644
+--- a/django/core/servers/basehttp.py
++++ b/django/core/servers/basehttp.py
+@@ -79,7 +79,7 @@ class WSGIServer(simple_server.WSGIServer):
+ 
+ class ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+     """A threaded version of the WSGIServer"""
+-    daemon_threads = True
++    daemon_threads = False
+ 
+ 
+ class ServerHandler(simple_server.ServerHandler):
+2025-10-03 19:41:24,099 - INFO - Eval script for django__django-14011 written to logs/run_evaluation/best_run/gpt-5-mini/django__django-14011/eval.sh; copying to container...
+2025-10-03 19:42:10,033 - INFO - Test runtime: 45.83 seconds
+2025-10-03 19:42:10,033 - INFO - Test output for django__django-14011 written to logs/run_evaluation/best_run/gpt-5-mini/django__django-14011/test_output.txt
+2025-10-03 19:42:10,139 - INFO - Git diff after:
+diff --git a/django/core/servers/basehttp.py b/django/core/servers/basehttp.py
+index 14dab517c9..6758440afd 100644
+--- a/django/core/servers/basehttp.py
++++ b/django/core/servers/basehttp.py
+@@ -79,7 +79,7 @@ class WSGIServer(simple_server.WSGIServer):
+ 
+ class ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+     """A threaded version of the WSGIServer"""
+-    daemon_threads = True
++    daemon_threads = False
+ 
+ 
+ class ServerHandler(simple_server.ServerHandler):
+2025-10-03 19:42:10,139 - INFO - Grading answer for django__django-14011...
+2025-10-03 19:42:10,140 - INFO - report: {'django__django-14011': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': [], 'failure': ['test_live_server_url_is_class_property (servers.tests.LiveServerAddress)', 'Data written to the database by a view can be read.', 'Fixtures are properly loaded and visible to the live server thread.', 'test_check_model_instance_from_subview (servers.tests.LiveServerThreadedTests)', 'test_view_calls_subview (servers.tests.LiveServerThreadedTests)', 'test_404 (servers.tests.LiveServerViews)', 'A HTTP 1.1 server is supposed to support keep-alive. Since our', 'test_environ (servers.tests.LiveServerViews)', 'test_keep_alive_connection_clears_previous_request_data (servers.tests.LiveServerViews)', 'See `test_closes_connection_without_content_length` for details. This', 'test_media_files (servers.tests.LiveServerViews)', 'LiveServerTestCase reports a 404 status code when HTTP client', 'Launched server serves with HTTP 1.1.', 'test_static_files (servers.tests.LiveServerViews)', 'test_view (servers.tests.LiveServerViews)', 'Each LiveServerTestCase binds to a unique port or fails to start a', "LiveServerTestCase.port customizes the server's port."]}, 'PASS_TO_PASS': {'success': ['test_set_up_class (servers.tests.LiveServerTestCaseSetupTest)', 'Contrast to'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-14011: resolved: False
+2025-10-03 19:42:10,141 - INFO - Attempting to stop container sweb.eval.django__django-14011.best_run...
+2025-10-03 19:42:25,393 - INFO - Attempting to remove container sweb.eval.django__django-14011.best_run...
+2025-10-03 19:42:25,407 - INFO - Container sweb.eval.django__django-14011.best_run removed.

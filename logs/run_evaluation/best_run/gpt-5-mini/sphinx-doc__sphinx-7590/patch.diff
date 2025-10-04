@@ -1,0 +1,13 @@
+diff --git a/sphinx/domains/cpp.py b/sphinx/domains/cpp.py
+index fe52d881d..3525d8b14 100644
+--- a/sphinx/domains/cpp.py
++++ b/sphinx/domains/cpp.py
+@@ -4664,6 +4664,8 @@ class DefinitionParser(BaseParser):
+             if self.match(regex):
+                 while self.current_char in 'uUlLfF':
+                     self.pos += 1
++                # accept user-defined literal suffixes (no word-boundary between number and suffix)
++                self.match(re.compile(r'[A-Za-z_][A-Za-z0-9_]*'))
+                 return ASTNumberLiteral(self.definition[pos:self.pos])
+ 
+         string = self._parse_string()

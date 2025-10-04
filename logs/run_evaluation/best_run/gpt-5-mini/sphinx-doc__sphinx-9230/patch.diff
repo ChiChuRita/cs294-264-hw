@@ -1,0 +1,60 @@
+diff --git a/sphinx/ext/napoleon/docstring.py b/sphinx/ext/napoleon/docstring.py
+index d8cb75a5f..a13a47119 100644
+--- a/sphinx/ext/napoleon/docstring.py
++++ b/sphinx/ext/napoleon/docstring.py
+@@ -912,6 +912,40 @@ def _recombine_set_tokens(tokens: List[str]) -> List[str]:
+             if open_braces == 0:
+                 break
+ 
++    def takewhile_paren(tokens):
++        open_paren = 0
++        previous_token = None
++        while True:
++            try:
++                token = tokens.popleft()
++            except IndexError:
++                break
++
++            if token == ", ":
++                previous_token = token
++                continue
++
++            if not token.strip():
++                continue
++
++            if token in keywords:
++                tokens.appendleft(token)
++                if previous_token is not None:
++                    tokens.appendleft(previous_token)
++                break
++
++            if previous_token is not None:
++                yield previous_token
++                previous_token = None
++
++            open_paren += token.count("(")
++            open_paren -= token.count(")")
++
++            yield token
++
++            if open_paren == 0:
++                break
++
+     def combine_set(tokens):
+         while True:
+             try:
+@@ -922,6 +956,9 @@ def _recombine_set_tokens(tokens: List[str]) -> List[str]:
+             if token == "{":
+                 tokens.appendleft("{")
+                 yield "".join(takewhile_set(tokens))
++            elif "(" in token and token.count("(") > token.count(")"):
++                tokens.appendleft(token)
++                yield "".join(takewhile_paren(tokens))
+             else:
+                 yield token
+ 
+@@ -1336,3 +1373,4 @@ class NumpyDocstring(GoogleDocstring):
+         lines += ['']
+ 
+         return self._format_admonition('seealso', lines)
++

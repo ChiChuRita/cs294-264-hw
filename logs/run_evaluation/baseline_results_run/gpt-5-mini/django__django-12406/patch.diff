@@ -1,0 +1,14 @@
+diff --git a/django/forms/models.py b/django/forms/models.py
+index dafc11f995..0a0b8b1403 100644
+--- a/django/forms/models.py
++++ b/django/forms/models.py
+@@ -1188,7 +1188,8 @@ class ModelChoiceField(ChoiceField):
+         if required and (initial is not None):
+             self.empty_label = None
+         else:
+-            self.empty_label = empty_label
++            # Don't provide an empty choice for radio-type widgets (e.g., RadioSelect)
++            self.empty_label = None if (required and widget is not None and getattr(widget, 'input_type', None) == 'radio') else empty_label
+ 
+         # Call Field instead of ChoiceField __init__() because we don't need
+         # ChoiceField.__init__().

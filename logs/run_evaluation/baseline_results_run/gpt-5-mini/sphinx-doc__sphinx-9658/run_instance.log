@@ -1,0 +1,57 @@
+2025-10-03 20:30:42,670 - INFO - Creating container for sphinx-doc__sphinx-9658...
+2025-10-03 20:30:42,694 - INFO - Container for sphinx-doc__sphinx-9658 created: 1f936be5a0742100fcd315fe6ec6766774336c01d789114ab042f51ab248b747
+2025-10-03 20:30:42,855 - INFO - Container for sphinx-doc__sphinx-9658 started: 1f936be5a0742100fcd315fe6ec6766774336c01d789114ab042f51ab248b747
+2025-10-03 20:30:42,855 - INFO - Intermediate patch for sphinx-doc__sphinx-9658 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/sphinx-doc__sphinx-9658/patch.diff, now applying to container...
+2025-10-03 20:30:42,992 - INFO - >>>>> Applied Patch:
+Checking patch sphinx/util/typing.py...
+Applied patch sphinx/util/typing.py cleanly.
+
+2025-10-03 20:30:43,646 - INFO - Git diff before:
+diff --git a/sphinx/util/typing.py b/sphinx/util/typing.py
+index 87707d48f..90315f4c4 100644
+--- a/sphinx/util/typing.py
++++ b/sphinx/util/typing.py
+@@ -192,10 +192,12 @@ def _restify_py37(cls: Optional[Type]) -> str:
+     elif isinstance(cls, typing._SpecialForm):
+         return ':py:obj:`~%s.%s`' % (cls.__module__, cls._name)
+     elif hasattr(cls, '__qualname__'):
++        # avoid producing a trailing dot when qualname is empty (e.g. mocked objects)
++        qual = ('.' + cls.__qualname__) if getattr(cls, '__qualname__', '') else ''
+         if cls.__module__ == 'typing':
+-            return ':py:class:`~%s.%s`' % (cls.__module__, cls.__qualname__)
++            return ':py:class:`~%s%s`' % (cls.__module__, qual)
+         else:
+-            return ':py:class:`%s.%s`' % (cls.__module__, cls.__qualname__)
++            return ':py:class:`%s%s`' % (cls.__module__, qual)
+     elif isinstance(cls, ForwardRef):
+         return ':py:class:`%s`' % cls.__forward_arg__
+     else:
+2025-10-03 20:30:43,647 - INFO - Eval script for sphinx-doc__sphinx-9658 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/sphinx-doc__sphinx-9658/eval.sh; copying to container...
+2025-10-03 20:31:00,417 - INFO - Test runtime: 16.71 seconds
+2025-10-03 20:31:00,419 - INFO - Test output for sphinx-doc__sphinx-9658 written to logs/run_evaluation/baseline_results_run/gpt-5-mini/sphinx-doc__sphinx-9658/test_output.txt
+2025-10-03 20:31:00,504 - INFO - Git diff after:
+diff --git a/sphinx/util/typing.py b/sphinx/util/typing.py
+index 87707d48f..90315f4c4 100644
+--- a/sphinx/util/typing.py
++++ b/sphinx/util/typing.py
+@@ -192,10 +192,12 @@ def _restify_py37(cls: Optional[Type]) -> str:
+     elif isinstance(cls, typing._SpecialForm):
+         return ':py:obj:`~%s.%s`' % (cls.__module__, cls._name)
+     elif hasattr(cls, '__qualname__'):
++        # avoid producing a trailing dot when qualname is empty (e.g. mocked objects)
++        qual = ('.' + cls.__qualname__) if getattr(cls, '__qualname__', '') else ''
+         if cls.__module__ == 'typing':
+-            return ':py:class:`~%s.%s`' % (cls.__module__, cls.__qualname__)
++            return ':py:class:`~%s%s`' % (cls.__module__, qual)
+         else:
+-            return ':py:class:`%s.%s`' % (cls.__module__, cls.__qualname__)
++            return ':py:class:`%s%s`' % (cls.__module__, qual)
+     elif isinstance(cls, ForwardRef):
+         return ':py:class:`%s`' % cls.__forward_arg__
+     else:
+2025-10-03 20:31:00,505 - INFO - Grading answer for sphinx-doc__sphinx-9658...
+2025-10-03 20:31:00,507 - INFO - report: {'sphinx-doc__sphinx-9658': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': [], 'failure': ['tests/test_util_typing.py::test_restify_mock']}, 'PASS_TO_PASS': {'success': ['tests/test_util_typing.py::test_restify', 'tests/test_util_typing.py::test_restify_type_hints_containers', 'tests/test_util_typing.py::test_restify_type_hints_Callable', 'tests/test_util_typing.py::test_restify_type_hints_Union', 'tests/test_util_typing.py::test_restify_type_hints_typevars', 'tests/test_util_typing.py::test_restify_type_hints_custom_class', 'tests/test_util_typing.py::test_restify_type_hints_alias', 'tests/test_util_typing.py::test_restify_type_ForwardRef', 'tests/test_util_typing.py::test_restify_type_Literal', 'tests/test_util_typing.py::test_restify_pep_585', 'tests/test_util_typing.py::test_restify_broken_type_hints', 'tests/test_util_typing.py::test_stringify', 'tests/test_util_typing.py::test_stringify_type_hints_containers', 'tests/test_util_typing.py::test_stringify_type_hints_pep_585', 'tests/test_util_typing.py::test_stringify_Annotated', 'tests/test_util_typing.py::test_stringify_type_hints_string', 'tests/test_util_typing.py::test_stringify_type_hints_Callable', 'tests/test_util_typing.py::test_stringify_type_hints_Union', 'tests/test_util_typing.py::test_stringify_type_hints_typevars', 'tests/test_util_typing.py::test_stringify_type_hints_custom_class', 'tests/test_util_typing.py::test_stringify_type_hints_alias', 'tests/test_util_typing.py::test_stringify_type_Literal', 'tests/test_util_typing.py::test_stringify_broken_type_hints', 'tests/test_util_typing.py::test_stringify_mock'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for sphinx-doc__sphinx-9658: resolved: False
+2025-10-03 20:31:00,507 - INFO - Attempting to stop container sweb.eval.sphinx-doc__sphinx-9658.baseline_results_run...
+2025-10-03 20:31:15,681 - INFO - Attempting to remove container sweb.eval.sphinx-doc__sphinx-9658.baseline_results_run...
+2025-10-03 20:31:15,690 - INFO - Container sweb.eval.sphinx-doc__sphinx-9658.baseline_results_run removed.

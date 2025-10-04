@@ -1,0 +1,21 @@
+diff --git a/django/core/servers/basehttp.py b/django/core/servers/basehttp.py
+index 14dab517c9..a7c8cc2040 100644
+--- a/django/core/servers/basehttp.py
++++ b/django/core/servers/basehttp.py
+@@ -79,7 +79,7 @@ class WSGIServer(simple_server.WSGIServer):
+ 
+ class ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+     """A threaded version of the WSGIServer"""
+-    daemon_threads = True
++    daemon_threads = False
+ 
+ 
+ class ServerHandler(simple_server.ServerHandler):
+@@ -210,6 +210,6 @@ def run(addr, port, wsgi_handler, ipv6=False, threading=False, server_cls=WSGISe
+         # termination before it quits. This will make auto-reloader faster
+         # and will prevent the need to kill the server manually if a thread
+         # isn't terminating correctly.
+-        httpd.daemon_threads = True
++        httpd.daemon_threads = False
+     httpd.set_app(wsgi_handler)
+     httpd.serve_forever()

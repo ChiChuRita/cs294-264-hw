@@ -1,0 +1,17 @@
+diff --git a/docs/ref/settings.txt b/docs/ref/settings.txt
+index 41387886c0..f8d604e2fe 100644
+--- a/docs/ref/settings.txt
++++ b/docs/ref/settings.txt
+@@ -2304,7 +2304,11 @@ used to allow rotation of the ``SECRET_KEY``.
+ In order to rotate your secret keys, set a new ``SECRET_KEY`` and move the
+ previous value to the beginning of ``SECRET_KEY_FALLBACKS``. Then remove the
+ old values from the end of the ``SECRET_KEY_FALLBACKS`` when you are ready to
+-expire the sessions, password reset tokens, and so on, that make use of them.
++expire tokens and signed data that make use of them. Note that Django's
++default session authentication (AbstractBaseUser.get_session_auth_hash)
++uses the current ``SECRET_KEY`` and does not consult
++``SECRET_KEY_FALLBACKS``, so rotating ``SECRET_KEY`` may invalidate existing
++sessions.
+ 
+ .. note::
+ 
