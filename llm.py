@@ -23,24 +23,29 @@ class OpenAIModel(LLM):
     """
     Example LLM implementation using OpenAI's Responses API.
 
-    Implements the class to call OpenAI's backend (e.g., OpenAI GPT-4 mini)
+    Implements the class to call OpenAI's backend (e.g., OpenAI GPT-5 mini)
     and return the model's text output. Ensures the model produces the response
     format required by ResponseParser and includes the stop token in the output string.
     """
 
-    def __init__(self, stop_token: str, model_name: str = "gpt-4o-mini"):
+    def __init__(self, stop_token: str, model_name: str = "gpt-5-mini", reasoning_effort: str | None = "medium"):
         # Initialize OpenAI client
         self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.stop_token = stop_token
         self.model_name = model_name
+        self.reasoning_effort = reasoning_effort
 
     def generate(self, prompt: str) -> str:
         # Call the model and obtain text, ensuring the stop token is present
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
-            )
+            kwargs = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            # Only attach reasoning for reasoning-capable models (o3/o4 families)
+            if self.reasoning_effort and any(k in self.model_name.lower() for k in ("o3", "o4")):
+                kwargs["reasoning"] = {"effort": self.reasoning_effort}
+            response = self.client.chat.completions.create(**kwargs)
             
             generated_text = response.choices[0].message.content
             

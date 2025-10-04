@@ -47,19 +47,39 @@ def process_instance(
         # Initialize the agent
         agent = ReactAgent("swe-react-agent", parser, llm)
         
-        # Minimal tools only
+        # Minimal tools only (bash-only style + backtrack)
         agent.add_functions([
             env.run_bash_cmd,
-            env.show_file,
-            env.replace_in_file,
+            env.show_file,  # convenience wrapper around nl -ba
+            env.replace_in_file,  # safe multi-line replace via heredoc
             agent.add_instructions_and_backtrack,
         ])
         
-        # Run the agent
-        output = agent.run(task, max_steps) 
-        
+        # Run the agent (first pass)
+        output = agent.run(task, max_steps)
+
         # Generate patch for SWE-Bench
         result = env.generate_patch(output)
+
+        # Retry once if no valid patch was produced
+        no_patch = not result.strip().startswith("diff --git") or "No changes detected" in result or "No file changes" in result
+        if no_patch:
+            try:
+                retry_instructions = (
+                    "RETRY: Previous attempt produced no patch. After each edit, immediately run:\n"
+                    "- git status --porcelain && git --no-pager diff --unified=0 path/to/edited-file\n"
+                    "- sed -n 'START,ENDp' path/to/edited-file\n"
+                    "If diff is empty or span unchanged, re-anchor your window and try again.\n"
+                    "Do NOT finish until git shows non-empty changes."
+                )
+                # Backtrack to the user message (id=1) with new instructions
+                agent.add_instructions_and_backtrack(retry_instructions, 1)
+                # Shorter second pass
+                output_retry = agent.run(task, max_steps // 2)
+                result = env.generate_patch(output_retry)
+            except Exception as _:
+                # Keep original result if retry fails
+                pass
         
     except Exception as e:
         print(f"Error processing instance {instance_id}: {e}")
