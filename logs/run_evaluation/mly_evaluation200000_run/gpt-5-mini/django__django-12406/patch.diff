@@ -1,0 +1,20 @@
+diff --git a/django/forms/models.py b/django/forms/models.py
+index dafc11f995..237d09a6de 100644
+--- a/django/forms/models.py
++++ b/django/forms/models.py
+@@ -13,8 +13,9 @@ from django.forms.forms import BaseForm, DeclarativeFieldsMetaclass
+ from django.forms.formsets import BaseFormSet, formset_factory
+ from django.forms.utils import ErrorList
+ from django.forms.widgets import (
+-    HiddenInput, MultipleHiddenInput, SelectMultiple,
++    HiddenInput, MultipleHiddenInput, SelectMultiple, RadioSelect,
+ )
++----END_FUNCTION_CALL
+ from django.utils.text import capfirst, get_text_list
+ from django.utils.translation import gettext, gettext_lazy as _
+ 
+@@ -1381,3 +1382,4 @@ def modelform_defines_fields(form_class):
+         form_class._meta.fields is not None or
+         form_class._meta.exclude is not None
+     )
++

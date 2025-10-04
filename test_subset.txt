@@ -1,6 +1,0 @@
-django__django-10973
-django__django-13297
-psf__requests-1921
-astropy__astropy-7166
-sphinx-doc__sphinx-9230
-

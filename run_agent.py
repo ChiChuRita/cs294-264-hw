@@ -13,10 +13,10 @@ DATASET_MAPPING = {
     "cs294": "lynnliu030/swebench-eval-subset",
 }
 
-from agent import ReactAgent
+from simple_agent import ReactAgent
 from llm import OpenAIModel
 from response_parser import ResponseParser
-from envs import SWEEnvironment, DumbEnvironment
+from envs import MinimalSWEEnvironment
 
 def process_instance(
     instance: dict,
@@ -43,22 +43,16 @@ def process_instance(
     
     try:
         # Initialize the environment
-        env = SWEEnvironment(instance)
+        env = MinimalSWEEnvironment(instance)
         # Initialize the agent
-        agent = ReactAgent("swe-agent", parser, llm)
+        agent = ReactAgent("swe-react-agent", parser, llm)
         
-        # Add functions to the agent BEFORE running
+        # Minimal tools only
         agent.add_functions([
-            env.run_bash_cmd, 
-            env.replace_in_file, 
-            env.show_file, 
+            env.run_bash_cmd,
+            env.show_file,
+            env.replace_in_file,
             agent.add_instructions_and_backtrack,
-            env.search_in_file,
-            env.list_functions,
-            env.search_codebase,
-            env.run_tests,
-            env.search_and_replace,
-            env.check_python_syntax,
         ])
         
         # Run the agent

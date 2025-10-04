@@ -1,0 +1,58 @@
+2025-10-03 17:12:10,301 - INFO - Creating container for django__django-14011...
+2025-10-03 17:12:10,682 - INFO - Container for django__django-14011 created: e7a86559c8816c7c4081008b7fb6b8cfc21d9742a1258ccb0ccbb3cf15d8e26e
+2025-10-03 17:12:11,344 - INFO - Container for django__django-14011 started: e7a86559c8816c7c4081008b7fb6b8cfc21d9742a1258ccb0ccbb3cf15d8e26e
+2025-10-03 17:12:11,345 - INFO - Intermediate patch for django__django-14011 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-14011/patch.diff, now applying to container...
+2025-10-03 17:12:11,927 - INFO - >>>>> Applied Patch:
+Checking patch django/core/servers/basehttp.py...
+/tmp/patch.diff:18: new blank line at EOF.
++
+Applied patch django/core/servers/basehttp.py cleanly.
+warning: 1 line adds whitespace errors.
+
+2025-10-03 17:12:15,166 - INFO - Git diff before:
+diff --git a/django/core/servers/basehttp.py b/django/core/servers/basehttp.py
+index 14dab517c9..7075efa3ec 100644
+--- a/django/core/servers/basehttp.py
++++ b/django/core/servers/basehttp.py
+@@ -79,7 +79,7 @@ class WSGIServer(simple_server.WSGIServer):
+ 
+ class ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+     """A threaded version of the WSGIServer"""
+-    daemon_threads = True
++    daemon_threads = False
+ 
+ 
+ class ServerHandler(simple_server.ServerHandler):
+@@ -213,3 +213,4 @@ def run(addr, port, wsgi_handler, ipv6=False, threading=False, server_cls=WSGISe
+         httpd.daemon_threads = True
+     httpd.set_app(wsgi_handler)
+     httpd.serve_forever()
++
+2025-10-03 17:12:15,167 - INFO - Eval script for django__django-14011 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-14011/eval.sh; copying to container...
+2025-10-03 17:13:15,819 - INFO - Test runtime: 60.54 seconds
+2025-10-03 17:13:15,820 - INFO - Test output for django__django-14011 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-14011/test_output.txt
+2025-10-03 17:13:15,930 - INFO - Git diff after:
+diff --git a/django/core/servers/basehttp.py b/django/core/servers/basehttp.py
+index 14dab517c9..7075efa3ec 100644
+--- a/django/core/servers/basehttp.py
++++ b/django/core/servers/basehttp.py
+@@ -79,7 +79,7 @@ class WSGIServer(simple_server.WSGIServer):
+ 
+ class ThreadedWSGIServer(socketserver.ThreadingMixIn, WSGIServer):
+     """A threaded version of the WSGIServer"""
+-    daemon_threads = True
++    daemon_threads = False
+ 
+ 
+ class ServerHandler(simple_server.ServerHandler):
+@@ -213,3 +213,4 @@ def run(addr, port, wsgi_handler, ipv6=False, threading=False, server_cls=WSGISe
+         httpd.daemon_threads = True
+     httpd.set_app(wsgi_handler)
+     httpd.serve_forever()
++
+2025-10-03 17:13:15,930 - INFO - Grading answer for django__django-14011...
+2025-10-03 17:13:15,931 - INFO - report: {'django__django-14011': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': [], 'failure': ['test_live_server_url_is_class_property (servers.tests.LiveServerAddress)', 'Data written to the database by a view can be read.', 'Fixtures are properly loaded and visible to the live server thread.', 'test_check_model_instance_from_subview (servers.tests.LiveServerThreadedTests)', 'test_view_calls_subview (servers.tests.LiveServerThreadedTests)', 'test_404 (servers.tests.LiveServerViews)', 'A HTTP 1.1 server is supposed to support keep-alive. Since our', 'test_environ (servers.tests.LiveServerViews)', 'test_keep_alive_connection_clears_previous_request_data (servers.tests.LiveServerViews)', 'See `test_closes_connection_without_content_length` for details. This', 'test_media_files (servers.tests.LiveServerViews)', 'LiveServerTestCase reports a 404 status code when HTTP client', 'Launched server serves with HTTP 1.1.', 'test_static_files (servers.tests.LiveServerViews)', 'test_view (servers.tests.LiveServerViews)', 'Each LiveServerTestCase binds to a unique port or fails to start a', "LiveServerTestCase.port customizes the server's port."]}, 'PASS_TO_PASS': {'success': ['test_set_up_class (servers.tests.LiveServerTestCaseSetupTest)', 'Contrast to'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-14011: resolved: False
+2025-10-03 17:13:15,932 - INFO - Attempting to stop container sweb.eval.django__django-14011.mly_evaluation200000_run...
+2025-10-03 17:13:31,092 - INFO - Attempting to remove container sweb.eval.django__django-14011.mly_evaluation200000_run...
+2025-10-03 17:13:31,115 - INFO - Container sweb.eval.django__django-14011.mly_evaluation200000_run removed.

@@ -1,0 +1,74 @@
+2025-10-03 17:12:10,297 - INFO - Creating container for django__django-10973...
+2025-10-03 17:12:10,608 - INFO - Container for django__django-10973 created: 14ef72f0f05291b35c2f081923d5f58226cdafc4d968e6a3a1131f4e0d959029
+2025-10-03 17:12:11,269 - INFO - Container for django__django-10973 started: 14ef72f0f05291b35c2f081923d5f58226cdafc4d968e6a3a1131f4e0d959029
+2025-10-03 17:12:11,271 - INFO - Intermediate patch for django__django-10973 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-10973/patch.diff, now applying to container...
+2025-10-03 17:12:11,865 - INFO - >>>>> Applied Patch:
+Checking patch django/db/backends/postgresql/client.py...
+/tmp/patch.diff:26: new blank line at EOF.
++
+Applied patch django/db/backends/postgresql/client.py cleanly.
+warning: 1 line adds whitespace errors.
+
+2025-10-03 17:12:15,184 - INFO - Git diff before:
+diff --git a/django/db/backends/postgresql/client.py b/django/db/backends/postgresql/client.py
+index 7fca6eff30..516c4c7559 100644
+--- a/django/db/backends/postgresql/client.py
++++ b/django/db/backends/postgresql/client.py
+@@ -56,9 +56,13 @@ class DatabaseClient(BaseDatabaseClient):
+                     # If the current locale can't encode the data, let the
+                     # user input the password manually.
+                     pass
+-            # Allow SIGINT to pass to psql to abort queries.
+-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+-            subprocess.check_call(args)
++                # Allow SIGINT to pass to psql to abort queries.
++                signal.signal(signal.SIGINT, signal.SIG_IGN)
++                env = None
++                if passwd:
++                    env = os.environ.copy()
++                    env['PGPASSWORD'] = passwd
++                subprocess.run(args, env=env, check=True)
+         finally:
+             # Restore the original SIGINT handler.
+             signal.signal(signal.SIGINT, sigint_handler)
+@@ -69,3 +73,4 @@ class DatabaseClient(BaseDatabaseClient):
+ 
+     def runshell(self):
+         DatabaseClient.runshell_db(self.connection.get_connection_params())
++
+2025-10-03 17:12:15,185 - INFO - Eval script for django__django-10973 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-10973/eval.sh; copying to container...
+2025-10-03 17:13:14,800 - INFO - Test runtime: 59.52 seconds
+2025-10-03 17:13:14,801 - INFO - Test output for django__django-10973 written to logs/run_evaluation/mly_evaluation200000_run/gpt-5-mini/django__django-10973/test_output.txt
+2025-10-03 17:13:14,917 - INFO - Git diff after:
+diff --git a/django/db/backends/postgresql/client.py b/django/db/backends/postgresql/client.py
+index 7fca6eff30..516c4c7559 100644
+--- a/django/db/backends/postgresql/client.py
++++ b/django/db/backends/postgresql/client.py
+@@ -56,9 +56,13 @@ class DatabaseClient(BaseDatabaseClient):
+                     # If the current locale can't encode the data, let the
+                     # user input the password manually.
+                     pass
+-            # Allow SIGINT to pass to psql to abort queries.
+-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+-            subprocess.check_call(args)
++                # Allow SIGINT to pass to psql to abort queries.
++                signal.signal(signal.SIGINT, signal.SIG_IGN)
++                env = None
++                if passwd:
++                    env = os.environ.copy()
++                    env['PGPASSWORD'] = passwd
++                subprocess.run(args, env=env, check=True)
+         finally:
+             # Restore the original SIGINT handler.
+             signal.signal(signal.SIGINT, sigint_handler)
+@@ -69,3 +73,4 @@ class DatabaseClient(BaseDatabaseClient):
+ 
+     def runshell(self):
+         DatabaseClient.runshell_db(self.connection.get_connection_params())
++
+2025-10-03 17:13:14,917 - INFO - Grading answer for django__django-10973...
+2025-10-03 17:13:14,918 - INFO - report: {'django__django-10973': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': ['test_accent (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)', 'test_basic (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)', 'test_column (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)', 'SIGINT is ignored in Python and passed to psql to abort quries.'], 'failure': ['test_nopass (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)']}, 'PASS_TO_PASS': {'success': [], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-10973: resolved: False
+2025-10-03 17:13:14,918 - INFO - Attempting to stop container sweb.eval.django__django-10973.mly_evaluation200000_run...
+2025-10-03 17:13:30,108 - INFO - Attempting to remove container sweb.eval.django__django-10973.mly_evaluation200000_run...
+2025-10-03 17:13:30,149 - INFO - Container sweb.eval.django__django-10973.mly_evaluation200000_run removed.

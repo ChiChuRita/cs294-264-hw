@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/chichurita/Dev/cs294-264-hw-FA25/run_test_subset.py", line 9, in <module>
-    import typer
-ModuleNotFoundError: No module named 'typer'

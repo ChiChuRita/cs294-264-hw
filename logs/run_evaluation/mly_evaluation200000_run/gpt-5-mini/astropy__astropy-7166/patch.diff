@@ -1,0 +1,39 @@
+diff --git a/astropy/utils/misc.py b/astropy/utils/misc.py
+index de3fb01d1..d5bee7523 100644
+--- a/astropy/utils/misc.py
++++ b/astropy/utils/misc.py
+@@ -526,15 +526,23 @@ class InheritDocstrings(type):
+                 (key.startswith('__') and key.endswith('__')
+                  and len(key) > 4) or
+                 not key.startswith('_'))
+-
+         for key, val in dct.items():
+-            if (inspect.isfunction(val) and
++            if ((inspect.isfunction(val) or isinstance(val, property)) and
+                 is_public_member(key) and
+-                val.__doc__ is None):
++                (val.__doc__ is None if not isinstance(val, property)
++                 else getattr(val.fget, '__doc__', None) is None)):
+                 for base in cls.__mro__[1:]:
+                     super_method = getattr(base, key, None)
+                     if super_method is not None:
+-                        val.__doc__ = super_method.__doc__
++                        # Prefer the direct __doc__, but for properties try the
++                        # fget's docstring if available.
++                        doc = getattr(super_method, '__doc__', None)
++                        if isinstance(val, property) and doc is None and hasattr(super_method, 'fget'):
++                            doc = getattr(super_method.fget, '__doc__', None)
++                        if isinstance(val, property) and hasattr(val, 'fget') and doc is not None:
++                            val.fget.__doc__ = doc
++                        elif not isinstance(val, property):
++                            val.__doc__ = doc
+                         break
+ 
+         super().__init__(name, bases, dct)
+@@ -1127,3 +1135,6 @@ def dtype_bytes_or_chars(dtype):
+     match = re.search(r'(\d+)$', dtype.str)
+     out = int(match.group(1)) if match else None
+     return out
++
++
++

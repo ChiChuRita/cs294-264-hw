@@ -21,24 +21,18 @@ from llm import LLM, OpenAIModel
 import inspect
 
 
-# ============================================================================
-# V3 VALIDATION FUNCTIONS - Prevent catastrophic edits
-# ============================================================================
-
 def validate_edit_safety(file_path: str, from_line: int, to_line: int, 
                         old_content: str, new_content: str) -> None:
     """
     Prevent accidental deletion of class/function definitions.
     Raises ValueError if edit would delete critical code structures.
     """
-    # Patterns that indicate critical code structure
     critical_patterns = [
         (r'^\s*class\s+\w+', 'class definition'),
         (r'^\s*def\s+\w+', 'function definition'),
         (r'^\s*async\s+def\s+\w+', 'async function definition'),
     ]
     
-    # Check if old content has critical patterns that new content doesn't
     for pattern, description in critical_patterns:
         old_matches = re.findall(pattern, old_content, re.MULTILINE)
         new_matches = re.findall(pattern, new_content, re.MULTILINE)
@@ -64,53 +58,34 @@ def validate_edit_safety(file_path: str, from_line: int, to_line: int,
 
 def enforce_comprehensive_testing(agent_messages: list) -> None:
     """
-    Verify agent ran comprehensive tests before allowing finish().
-    Raises ValueError if testing requirements not met.
+    Simple verification: Made changes? Tested them somehow? Good to go.
     """
-    # Extract all assistant messages that called run_tests
-    test_calls = []
-    for msg in agent_messages:
-        if msg.get('role') == 'assistant':
-            content = msg.get('content', '')
-            if 'run_tests' in content or ('run_bash_cmd' in content and 'pytest' in content):
-                test_calls.append(content)
+    test_commands = [
+        msg.get('content', '') for msg in agent_messages 
+        if msg.get('role') == 'assistant'
+    ]
+    ran_any_test = any(
+        'pytest' in cmd or 'python -c' in cmd or 'python -m' in cmd or 'test' in cmd.lower()
+        for cmd in test_commands
+    )
     
-    if len(test_calls) < 1:
+    test_results = [
+        msg.get('content', '') for msg in agent_messages 
+        if msg.get('role') == 'system'
+    ]
+    has_passed = any('PASSED' in result for result in test_results)
+    has_output = any('Result:' in result and len(result) > 100 for result in test_results)
+    
+    pytest_unavailable = any('No module named pytest' in r for r in test_results)
+    
+    if not pytest_unavailable and ran_any_test and not has_passed:
         raise ValueError(
-            "❌ CANNOT FINISH: No test execution detected!\n"
-            "\n"
-            "REQUIRED before calling finish():\n"
-            "1. Run originally failing tests to verify your fix works\n"
-            "2. Run ENTIRE test file/module to check for regressions\n"
-            "\n"
-            "Example:\n"
-            "  run_tests(test_path='tests/test_views.py::TestClass::test_failing')\n"
-            "  run_tests(test_path='tests/test_views.py')  # ALL tests in file\n"
-            "\n"
-            f"Currently you have: {len(test_calls)} test run(s)\n"
+            "❌ Tests ran but no PASSED found! Verify: grep PASSED /tmp/out.txt"
         )
     
-    # Check if comprehensive testing (not just single test)
-    comprehensive_test = False
-    for call in test_calls:
-        # Comprehensive if: no "::" in path (full file), or explicit mention of "all"
-        if ('run_tests' in call and '::' not in call) or 'all' in call.lower():
-            comprehensive_test = True
-            break
-    
-    if not comprehensive_test:
+    if not ran_any_test:
         raise ValueError(
-            "❌ CANNOT FINISH: Only ran specific tests, not comprehensive!\n"
-            "\n"
-            "You MUST run the ENTIRE test file/module to catch regressions.\n"
-            "\n"
-            "What you did:\n"
-            f"  {test_calls[-1] if test_calls else 'Nothing'}  # Only specific test(s)\n"
-            "\n"
-            "What you MUST do:\n"
-            "  run_tests(test_path='tests/full_test_file.py')  # ALL tests\n"
-            "\n"
-            "This prevents breaking existing tests (PASS_TO_PASS failures).\n"
+            "❌ No testing performed! Run: python -c '<reproduction_case>'"
         )
 
 class ReactAgent:
@@ -134,77 +109,147 @@ class ReactAgent:
 
         # Registered tools
         self.function_map: Dict[str, Callable] = {}
+        
+        self.consecutive_syntax_errors = 0
+        self.consecutive_not_found = 0
+        self.recent_actions = []
+        self.failed_approaches = []
 
-        # Set up the initial structure of the history
-        # Create required root nodes and a user node (task) and an instruction node.
-        system_prompt = """You are a ReAct agent solving software engineering tasks by EDITING source code files.
+        system_prompt = """You are an expert software engineer fixing bugs.
 
-**CRITICAL RULES:**
-1. NEVER edit test files - they define requirements. Edit SOURCE CODE to pass tests.
-2. Make ACTUAL file changes using replace_in_file/search_and_replace - not just comments!
-3. Call ONE tool per response. Wait for results before next action.
-4. Preserve indentation exactly - use sed to inspect before editing.
-5. Run comprehensive tests before finish(): failing tests + ENTIRE test file/module.
+# TOOLS (Use specialized tools - they're safer than bash!)
+- **show_file**(file_path: str) - Show file with line numbers
+- **read_specific_lines**(file_path, start_line, end_line) - Read lines from file
+- **replace_in_file**(file_path, from_line, to_line, content) - Replace lines safely
+- **insert_lines**(file_path, after_line, content) - Insert new lines
+- **check_syntax**(file_path: str) - Check Python syntax
+- **find_failing_test**(issue_description: str) - Smart test discovery from description
+- **explore_codebase_deeply**(topic: str) - Deep exploration (classes, functions, tests)
+- **run_bash_cmd**(command: str) - Execute bash (use others first!)
+- **add_instructions_and_backtrack**(instructions, at_message_id) - Try different approach
+- **finish**(result: str) - Submit solution (auto-generates git diff)
 
-**WORKFLOW:**
-1. Read failing tests to understand requirements
-2. Make targeted code changes (not test changes!)
-3. Verify each edit: syntax check, git diff
-4. Run tests: specific failures, then full module
-5. Fix any issues, re-test comprehensively
-6. Call finish() only when all tests pass
+# SUCCESS PATTERNS (Learn from these!)
 
-**COMMON MISTAKES TO AVOID:**
-- Modifying test_*.py files (❌ Wrong! Edit source code instead)
-- Adding only comments without logic changes (❌ Not a fix!)
-- Broken syntax from orphaned code/conditions (❌ Always verify!)
-- Skipping comprehensive testing (❌ Causes regressions!)
+✅ EXAMPLE: django__django-11179 (SUCCEEDED - 40% success rate)
+1. Found test: grep -rn "test_fast_delete_instance_set_pk_none"
+2. Read test code to understand: "After delete, instance.pk should be None"
+3. Located implementation: grep -rn "def delete" django/db/models/deletion.py
+4. Made MINIMAL 2-line fix: Added setattr(instance, model._meta.pk.attname, None)
+5. Verified with: python -m pytest test_name -xvs | grep PASSED ✓
+6. Checked regressions: python -m pytest delete/tests.py -v ✓
+7. Submitted with finish()
 
-Your edits must change BEHAVIOR, not just add documentation."""
+✅ KEY INSIGHT: Minimal changes (1-5 lines) = high success rate
+✅ KEY INSIGHT: Always verify "PASSED" explicitly, not just exit code 0
+✅ KEY INSIGHT: Run full test file to catch regressions (PASS_TO_PASS failures)
+
+❌ ANTI-PATTERN: Rewriting entire functions → breaks tests, causes regressions
+❌ ANTI-PATTERN: Not verifying "PASSED" in test output → submit broken code
+❌ ANTI-PATTERN: Modifying test files → NEVER do this! Tests define correctness
+❌ ANTI-PATTERN: Getting stuck in loops → use add_instructions_and_backtrack after 3-5 failures
+
+# YOUR MANTRA
+Every turn, ask yourself: "What MINIMAL change would make this specific test pass?"
+
+# CORE RULES
+1. **Use specialized tools first**: show_file, read_specific_lines, replace_in_file (safer!)
+2. **Never modify test files** - they define correctness
+3. **Minimal changes**: Add 1-5 lines, don't rewrite functions
+4. **Verify everything**: check_syntax → diff → test → check "PASSED"
+5. **One tool per turn** - observe before proceeding
+
+# WORKFLOW EXAMPLE
+Problem: "Function crashes on None"
+
+1. Find failing test → `run_bash_cmd("grep -rn 'def test_none' tests/")`
+2. Read test → `read_specific_lines("tests/test_module.py", 45, 60)`
+3. Find implementation → `run_bash_cmd("grep -rn 'def target_function' src/")`
+4. Show source file → `show_file("src/module.py")`
+5. Make MINIMAL fix → `insert_lines("src/module.py", 46, "    if value is None: return None")`
+6. Check syntax → `check_syntax("src/module.py")`
+7. Review changes → `run_bash_cmd("git diff src/module.py")`
+8. Run test → `run_bash_cmd("python -m pytest tests/test_module.py::test_none -xvs 2>&1 | tee /tmp/out.txt")`
+9. VERIFY "PASSED" → `run_bash_cmd("grep PASSED /tmp/out.txt")`
+10. Check regressions → `run_bash_cmd("python -m pytest tests/test_module.py -v")`
+
+# CRITICAL: MINIMAL CHANGES
+BAD: Rewriting entire function (20+ lines) → breaks tests, causes regressions
+GOOD: Add 1-5 lines only → safer, easier to verify
+
+# TEST VERIFICATION
+REQUIRED before finish():
+```bash
+# Must see "PASSED" explicitly
+python -m pytest test::name -xvs 2>&1 | tee /tmp/test.txt
+grep "PASSED" /tmp/test.txt  # Must succeed!
+
+# Must check NO regressions  
+python -m pytest test_file.py -v | grep -E "failed|ERROR"  # Must be empty!
+```
+
+# WHEN TO BACKTRACK
+After 5 failed attempts OR stuck in loop:
+```
+add_instructions_and_backtrack(
+    instructions="New approach: [describe different strategy]",
+    at_message_id=15
+)
+```
+
+# RESPONSE FORMAT
+EVERY response MUST end with ONE function call:
+```
+I'll check the test file.
+----BEGIN_FUNCTION_CALL----
+run_bash_cmd
+----ARG----
+command
+cat tests/test_example.py | head -30
+----END_FUNCTION_CALL----
+```
+
+NEVER write without calling a tool. NEVER ask user for input."""
 
         self.system_message_id = self.add_message("system", system_prompt)
         self.user_message_id = self.add_message("user", "")
         
-        # Add default instructions to emphasize the importance of actual file edits
-        default_instructions = """MANDATORY WORKFLOW:
+        # Concise instructions
+        default_instructions = """# WORKFLOW (Use specialized tools!)
 
-1. **READ TESTS FIRST**: Locate and read ALL failing tests to understand requirements
-   - Never modify test files - they define what's correct
-   - Tests tell you WHAT needs to work, not HOW to implement it
+1. **Find test** → `run_bash_cmd("grep -rn 'def test_name' tests/")`
+2. **Read test** → `read_specific_lines("tests/file.py", START, END)`
+3. **Find implementation** → `run_bash_cmd("grep -rn 'def function' --include='*.py' --exclude-dir=tests")`
+4. **Read code** → `show_file("src/file.py")` or `read_specific_lines("src/file.py", START, END)`
+5. **Run test** → `run_bash_cmd("python -m pytest test::name -xvs 2>&1 | tee /tmp/out.txt")`
+6. **Understand error** → `run_bash_cmd("grep -E 'Error|Expected|Actual' /tmp/out.txt")`
+7. **Make MINIMAL fix** → `insert_lines("file.py", LINE, "new code")` or `replace_in_file("file.py", FROM, TO, "new code")`
+8. **Check syntax** → `check_syntax("file.py")`
+9. **Review diff** → `run_bash_cmd("git diff file.py")`
+10. **Test again** → `run_bash_cmd("python -m pytest test::name -xvs 2>&1 | tee /tmp/test.txt")`
+11. **VERIFY "PASSED"** → `run_bash_cmd("grep PASSED /tmp/test.txt")` (CRITICAL!)
+12. **Check regressions** → `run_bash_cmd("python -m pytest test_file.py -v")`
+13. **If clean, finish** → `finish("Fixed X by doing Y")`
 
-2. **IDENTIFY SOURCE CODE**: Find the actual implementation files (NOT test files!)
-   - Common locations: src/, lib/, main package directories
-   - Avoid: tests/, test_*.py, *_test.py
+# CRITICAL RULES
+- **Use specialized tools**: show_file, read_specific_lines, insert_lines, replace_in_file (safer than bash!)
+- **Minimal changes**: Add 1-5 lines, NEVER rewrite functions
+- **Verify "PASSED"**: grep must find it, not just exit code 0
+- **Check regressions**: Full test file must pass
+- **One tool per turn**: Observe before proceeding
+- **Never modify tests**: They define correctness
 
-3. **MAKE REAL CODE CHANGES**: Edit source files to fix the issue
-   - Use replace_in_file or search_and_replace
-   - Add/modify LOGIC, not just comments
-   - Preserve exact indentation (use sed first to check)
-
-4. **VERIFY IMMEDIATELY**: After each edit, run:
-   - check_python_syntax (catch syntax errors early)
-   - git diff (confirm actual changes)
-   - wc -l (ensure file not corrupted)
-
-5. **TEST COMPREHENSIVELY** (MANDATORY before finish):
-   - Run failing tests: run_tests(test_path='path/to/test::specific_test')
-   - Run ENTIRE module: run_tests(test_path='path/to/test_file.py')
-   - Both must pass - partial success is not enough!
-
-6. **FIX ISSUES**: If tests fail, analyze error and iterate
-   - Don't guess - read the actual error message
-   - Check for edge cases (None, empty, zero)
-   - Ensure you modified source code, not tests
-
-7. **FINISH**: Only after ALL tests pass
-
-CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add comments."""
+# IF STUCK (>3 failures)
+```
+add_instructions_and_backtrack(
+    instructions="New strategy: [describe]",
+    at_message_id=15
+)
+```"""
         self.instructions_message_id = self.add_message("instructor", default_instructions)
         
-        # NOTE: mandatory finish function that terminates the agent
         self.add_functions([self.finish])
 
-    # -------------------- MESSAGE TREE --------------------
     def add_message(self, role: str, content: str) -> int:
         """
         Create a new message and add it to the tree.
@@ -212,28 +257,23 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
         The message must include fields: role, content, timestamp, unique_id, parent, children.
         Maintain a pointer to the current node and the root node.
         """
-        # Create the new message with all required fields
         message_id = len(self.id_to_message)
         message = {
             "role": role,
             "content": content,
-            "timestamp": int(time.time()),  # Use Unix timestamp (int) for JSON serialization
+            "timestamp": int(time.time()),
             "unique_id": message_id,
             "parent": self.current_message_id,
             "children": []
         }
         
-        # Add the message to the tree
         self.id_to_message.append(message)
         
-        # If there's a parent, link this message as its child
         if self.current_message_id != -1:
             self.id_to_message[self.current_message_id]["children"].append(message_id)
         
-        # Update the current message pointer
         self.current_message_id = message_id
         
-        # If this is the first message, set it as the root
         if self.root_message_id == -1:
             self.root_message_id = message_id
         
@@ -247,7 +287,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
         """
         Build the full LLM context by walking from the root to the current message.
         """
-        # Walk from current message back to root to build the path
         path = []
         message_id = self.current_message_id
         
@@ -255,17 +294,14 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
             path.append(message_id)
             message_id = self.id_to_message[message_id]["parent"]
         
-        # Reverse the path to get root-to-current order
         path.reverse()
         
-        # Build the context string by concatenating all messages
         context_parts = []
         for msg_id in path:
             context_parts.append(self.message_id_to_context(msg_id))
         
         return "".join(context_parts)
 
-    # -------------------- REQUIRED TOOLS --------------------
     def add_functions(self, tools: List[Callable]):
         """
         Add callable tools to the agent's function map.
@@ -274,41 +310,40 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
         - The signature of each tool
         - The docstring of each tool
         """
-        # Register each tool in the function map using the function name as the key
         for tool in tools:
             self.function_map[tool.__name__] = tool
     
     def finish(self, result: str):
-        """Call this function ONLY AFTER you have ACTUALLY MODIFIED the necessary files using run_bash_cmd or replace_in_file.
+        """Submit your solution. Generates git diff patch automatically.
         
-        This function generates a git diff patch of your changes. If you haven't edited any files yet, 
-        the patch will be empty and your solution will fail.
+        REQUIREMENTS BEFORE CALLING:
+        1. All target tests MUST show "PASSED" in their output
+        2. Full test file run without regressions
+        3. Changes verified with git diff
+        4. Syntax validated with python -m py_compile
         
-        BEFORE calling finish:
-        1. Make sure you've used run_bash_cmd or replace_in_file to EDIT files
-        2. Verify your changes with: run_bash_cmd(command="git diff")
-        3. Confirm files were modified: run_bash_cmd(command="git status")
-        4. Run ALL tests to ensure PASS_TO_PASS tests still pass (no regressions)
-
-        Args: 
-            result (str): A brief summary of what you changed (the actual patch is generated automatically)
-
+        VERIFICATION CHECKLIST:
+        ✓ Ran: python -m pytest path/to/test::test_name -xvs | grep "PASSED"
+        ✓ Saw: "PASSED" in output (not just exit code 0)
+        ✓ Ran: python -m pytest path/to/test_file.py -x  
+        ✓ Saw: No FAILED or ERROR in full suite
+        ✓ Ran: git diff (reviewed actual changes)
+        
+        Args:
+            result (str): Summary of fix (patch auto-generated from git diff)
+            
         Returns:
-            The result passed as an argument. The result is then returned by the agent's run method.
+            Result summary (or raises error if requirements not met)
         """
         import subprocess
         
-        # VALIDATION 0: Enforce comprehensive testing (V3 FIX)
         try:
             enforce_comprehensive_testing(self.id_to_message)
         except ValueError as e:
-            # Re-raise as system message so agent sees the error
             self.add_message("system", str(e))
             raise
         
-        # VALIDATION 1: Check for Python syntax errors in modified files
         try:
-            # Get list of modified Python files
             status_result = subprocess.run(
                 ["git", "diff", "--name-only", "HEAD"],
                 capture_output=True,
@@ -320,7 +355,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
                 if f.endswith('.py') and f
             ]
             
-            # Check syntax for each modified Python file
             syntax_errors = []
             for file_path in modified_files:
                 try:
@@ -330,7 +364,7 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
                 except SyntaxError as e:
                     syntax_errors.append(f"{file_path}:{e.lineno}: {e.msg}")
                 except FileNotFoundError:
-                    pass  # File was deleted, skip
+                    pass
             
             if syntax_errors:
                 error_msg = (
@@ -341,14 +375,12 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
                 raise ValueError(error_msg)
                 
         except subprocess.TimeoutExpired:
-            pass  # If git commands timeout, proceed anyway
+            pass
         except ValueError:
-            raise  # Re-raise validation errors
+            raise
         except Exception as e:
-            # Log other errors but don't block
             print(f"Syntax validation warning: {e}")
         
-        # VALIDATION 2: Check if there are any changes (patch validation)
         try:
             diff_result = subprocess.run(
                 ["git", "diff", "--staged"],
@@ -365,7 +397,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
             
             patch = diff_result.stdout + unstaged_diff.stdout
             
-            # Check if patch is empty or too short
             if not patch or len(patch.strip()) < 10:
                 raise ValueError(
                     "❌ CANNOT FINISH: No changes detected!\n"
@@ -373,7 +404,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
                     "Use 'git diff' to verify you have made changes."
                 )
             
-            # Check if patch contains only deletions (possible file corruption)
             if patch.count('\n-') > patch.count('\n+') * 3:
                 raise ValueError(
                     "⚠️ WARNING: Patch contains mostly deletions!\n"
@@ -381,14 +411,11 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
                 )
                 
         except subprocess.TimeoutExpired:
-            pass  # If git commands timeout, proceed anyway
+            pass
         except Exception as e:
-            # Log validation error but don't block finish
             print(f"Patch validation warning: {e}")
         
-        # VALIDATION 2: Check for regression testing evidence
-        # Look for run_tests calls in recent messages
-        recent_messages = self.id_to_message[-20:]  # Check last 20 messages
+        recent_messages = self.id_to_message[-20:]
         test_commands = [
             msg.get("content", "") 
             for msg in recent_messages 
@@ -396,7 +423,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
         ]
         test_commands_str = " ".join(test_commands)
         
-        # Check if agent ran comprehensive tests (not just single tests)
         has_run_tests = "run_tests" in test_commands_str or "pytest" in test_commands_str
         has_comprehensive_test = (
             "test_" in test_commands_str and 
@@ -404,14 +430,12 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
         )
         
         if not (has_run_tests and has_comprehensive_test):
-            # Issue a strong warning but don't block (agent might have good reason)
             warning_msg = (
                 "\n⚠️⚠️⚠️ WARNING: No evidence of comprehensive testing! ⚠️⚠️⚠️\n"
                 "You SHOULD have run the ENTIRE test file/module to check for regressions.\n"
                 "If you haven't done this, your changes might break existing tests (PASS_TO_PASS).\n"
                 "Consider running: run_tests(test_path='tests/full_module_test.py')\n"
             )
-            # Add warning to result but allow finish
             result = result + warning_msg
         
         return result 
@@ -426,15 +450,78 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
 
         Returns a short success string.
         """
-        # Update the instruction node content
-        self.set_message_content(self.instructions_message_id, instructions)
+        at_message_id = int(at_message_id)
         
-        # Backtrack: move the current pointer to the specified message
+        self.set_message_content(self.instructions_message_id, instructions)
         self.current_message_id = at_message_id
         
+        self.failed_approaches.append(instructions[:50])
+        self.consecutive_syntax_errors = 0
+        self.consecutive_not_found = 0
+        
         return f"Instructions updated and backtracked to message {at_message_id}."
+    
+    def _is_stuck(self, error_msg: str, function_name: str) -> bool:
+        """
+        Detect if agent is stuck in a failure loop.
+        Returns True if automatic backtracking should be triggered.
+        """
+        if "SyntaxError" in error_msg or "IndentationError" in error_msg:
+            self.consecutive_syntax_errors += 1
+        else:
+            self.consecutive_syntax_errors = 0
+        
+        if "FileNotFoundError" in error_msg or "No such file" in error_msg:
+            self.consecutive_not_found += 1
+        else:
+            self.consecutive_not_found = 0
+        
+        action_key = f"{function_name}:{error_msg[:30]}"
+        self.recent_actions.append(action_key)
+        if len(self.recent_actions) > 10:
+            self.recent_actions.pop(0)
+        
+        stuck_patterns = [
+            self.consecutive_syntax_errors >= 3,
+            self.consecutive_not_found >= 3,
+            len(self.recent_actions) >= 5 and len(set(self.recent_actions[-5:])) <= 2,
+        ]
+        
+        return any(stuck_patterns)
+    
+    def _auto_backtrack(self, step: int):
+        """
+        Automatically backtrack with alternative strategies when stuck.
+        """
+        alternative_strategies = [
+            "STUCK DETECTED! Try a different approach:\n"
+            "1. Read MORE context (parent classes, related modules)\n"
+            "2. Look for similar test cases that already pass\n"
+            "3. Search for documentation or docstrings explaining expected behavior",
+            
+            "STILL STUCK! Different strategy:\n"
+            "1. Use explore_codebase_deeply() to find all related code\n"
+            "2. Look for inheritance hierarchies (base classes)\n"
+            "3. Check if there's a different file that needs modification",
+            
+            "FINAL ATTEMPT! Radical rethink:\n"
+            "1. Re-read the test requirement from scratch\n"
+            "2. Maybe the fix location is COMPLETELY different\n"
+            "3. Try find_failing_test() to understand what EXACTLY is being tested",
+        ]
+        
+        strategy_index = len(self.failed_approaches) % len(alternative_strategies)
+        strategy = alternative_strategies[strategy_index]
+        
+        backtrack_to = max(self.instructions_message_id + 1, self.current_message_id - 20)
+        
+        self.add_message("system", 
+            f"🔄 AUTO-BACKTRACK TRIGGERED (Step {step})\n\n{strategy}\n\n"
+            f"Backtracking to message {backtrack_to} to try fresh approach."
+        )
+        
+        self.add_instructions_and_backtrack(strategy, backtrack_to)
 
-    # -------------------- MAIN LOOP --------------------
     def run(self, task: str, max_steps: int) -> str:
         """
         Run the agent's main ReAct loop:
@@ -447,52 +534,54 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
             - Append tool result to the tree
             - If `finish` is called, return the final result
         """
-        # Set the user message content with the task
         self.set_message_content(self.user_message_id, task)
         
-        # Main ReAct loop
+        checkpoints = {
+            10: "🎯 Checkpoint: Have you found the failing test yet?",
+            20: "🎯 Checkpoint: Do you understand what the test expects?",
+            35: "🎯 Checkpoint: Have you located the buggy code?",
+            50: "🎯 Checkpoint: Have you tried a fix? Did tests pass?",
+            70: "⚠️ Checkpoint: 70% through. Consider using add_instructions_and_backtrack if stuck.",
+            85: "🚨 WARNING: Approaching step limit! Prioritize finishing over perfection.",
+        }
+        
         for step in range(max_steps):
+            if step in checkpoints:
+                self.add_message("system", f"\n{'='*60}\n{checkpoints[step]}\n{'='*60}\n")
+            
             try:
-                # Build context from the message tree
                 context = self.get_context()
-                
-                # Query the LLM
                 response = self.llm.generate(context)
-                
-                # Add the assistant's response to the message tree
                 self.add_message("assistant", response)
                 
-                # Parse the function call from the response
                 parsed = self.parser.parse(response)
                 function_name = parsed["name"]
                 arguments = parsed["arguments"]
                 
-                # Check if the function exists in the function map
                 if function_name not in self.function_map:
                     error_msg = f"Error: Function '{function_name}' not found in available tools."
                     self.add_message("system", error_msg)
                     continue
                 
-                # Execute the tool
                 func = self.function_map[function_name]
                 try:
                     result = func(**arguments)
                     
-                    # If finish was called, return the result
                     if function_name == "finish":
                         return result
                     
-                    # Add the tool result to the message tree
                     result_msg = f"Tool '{function_name}' executed successfully. Result:\n{result}"
                     self.add_message("system", result_msg)
                     
                 except Exception as e:
-                    # Handle tool execution errors
                     error_msg = f"Error executing tool '{function_name}': {str(e)}"
                     self.add_message("system", error_msg)
                     
-                    # Add reflection prompt with specific indentation guidance
                     error_str = str(e)
+                    if self._is_stuck(error_str, function_name):
+                        self._auto_backtrack(step)
+                        continue
+                    
                     is_indentation_error = "IndentationError" in error_str or "unexpected indent" in error_str
                     is_test_failure = "test" in function_name.lower() or "FAILED" in error_str or "AssertionError" in error_str
                     
@@ -507,7 +596,6 @@ CRITICAL: One tool call per response. Changes must modify BEHAVIOR, not just add
 3.  **Plan**: Formulate your next step based on your analysis.
 """
                     
-                    # Add specific guidance for indentation errors
                     if is_indentation_error and function_name == "check_python_syntax":
                         reflection_prompt += """
 **INDENTATION ERROR DETECTED!**
@@ -521,7 +609,6 @@ This is likely because your `replace_in_file` call didn't preserve the original 
 5. Try again with correct indentation in the content parameter
 """
                     
-                    # Add specific guidance for test failures
                     if is_test_failure:
                         reflection_prompt += """
 **TEST FAILURE DETECTED!**
@@ -551,17 +638,59 @@ B. If it's a DIFFERENT test now failing (regression):
                     self.add_message("system", reflection_prompt)
 
             except Exception as e:
-                # Handle parsing or other errors
-                error_msg = f"Error in agent loop: {str(e)}"
+                error_str = str(e)
+                error_msg = f"Error in agent loop: {error_str}"
+                
+                if "Missing ----BEGIN_FUNCTION_CALL----" in error_str:
+                    error_msg += """
+
+⚠️ RESPONSE FORMAT ERROR: You did not call any tool!
+
+EVERY response MUST end with a function call. You cannot just write explanatory text.
+
+WRONG:
+  "I need to check the file. Should I proceed?"
+  
+CORRECT:
+  "I need to check the file."
+  ----BEGIN_FUNCTION_CALL----
+  run_bash_cmd
+  ----ARG----
+  command
+  cat path/to/file.py
+  ----END_FUNCTION_CALL----
+
+Choose one of these tools and call it NOW:
+- run_bash_cmd(command="...") - Execute any bash command
+- add_instructions_and_backtrack(instructions="...", at_message_id=N) - Try different approach
+- finish(result="...") - Submit solution (only after tests pass)"""
+                
+                elif "Function name is empty" in error_str:
+                    error_msg += """
+
+⚠️ RESPONSE FORMAT ERROR: Function name is missing!
+
+You wrote:
+  ----BEGIN_FUNCTION_CALL--------END_FUNCTION_CALL----
+  
+This is incomplete. You must specify which function to call.
+
+CORRECT format:
+  ----BEGIN_FUNCTION_CALL----
+  run_bash_cmd
+  ----ARG----
+  command
+  ls -la
+  ----END_FUNCTION_CALL----
+
+Available functions: run_bash_cmd, add_instructions_and_backtrack, finish"""
+                
                 self.add_message("system", error_msg)
         
-        # If we reach max_steps without calling finish
         return f"Agent reached maximum steps ({max_steps}) without completing the task."
 
     def message_id_to_context(self, message_id: int) -> str:
-        """
-        Helper function to convert a message id to a context string.
-        """
+        """Convert a message id to a context string."""
         message = self.id_to_message[message_id]
         header = f'----------------------------\n|MESSAGE(role="{message["role"]}", id={message["unique_id"]})|\n'
         content = message["content"]
@@ -597,5 +726,4 @@ def main():
     print(result)
 
 if __name__ == "__main__":
-    # Optional: students can add their own quick manual test here.
     main()

@@ -1,0 +1,46 @@
+diff --git a/django/contrib/auth/__init__.py b/django/contrib/auth/__init__.py
+index 155330c596..8ade50d22f 100644
+--- a/django/contrib/auth/__init__.py
++++ b/django/contrib/auth/__init__.py
+@@ -196,14 +196,28 @@ def get_user(request):
+         if backend_path in settings.AUTHENTICATION_BACKENDS:
+             backend = load_backend(backend_path)
+             user = backend.get_user(user_id)
+-            # Verify the session
+-            if hasattr(user, "get_session_auth_hash"):
+-                session_hash = request.session.get(HASH_SESSION_KEY)
+-                session_hash_verified = session_hash and constant_time_compare(
+-                    session_hash, user.get_session_auth_hash()
+-                )
+-                if not session_hash_verified:
+-                    request.session.flush()
++199\t\t\t\t# Verify the session
++200\t\t\t\tif hasattr(user, "get_session_auth_hash"):
++201\t\t\t\t\tsession_hash = request.session.get(HASH_SESSION_KEY)
++202\t\t\t\t\tsession_hash_verified = False
++203\t\t\t\t\tif session_hash:
++204\t\t\t\t\t\tfrom django.utils.crypto import salted_hmac
++205\t\t\t\t\t\tfallbacks = settings.SECRET_KEY_FALLBACKS or []
++206\t\t\t\t\t\tfor secret in [settings.SECRET_KEY, *fallbacks]:
++207\t\t\t\t\t\t\tif constant_time_compare(
++208\t\t\t\t\t\t\t\tsession_hash,
++209\t\t\t\t\t\t\t\tsalted_hmac(
++210\t\t\t\t\t\t\t\t\t"django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash",
++211\t\t\t\t\t\t\t\t\tuser.password,
++212\t\t\t\t\t\t\t\t\tsecret=secret,
++213\t\t\t\t\t\t\t\t\talgorithm="sha256",
++214\t\t\t\t\t\t\t\t).hexdigest(),
++215\t\t\t\t\t\t\t):
++216\t\t\t\t\t\t\t\tsession_hash_verified = True
++217\t\t\t\t\t\t\t\tbreak
++218\t\t\t\t\tif not session_hash_verified:
++219\t\t\t\t\t\trequest.session.flush()
++220\t\t\t\t\t\tuser = None
+                     user = None
+ 
+     return user or AnonymousUser()
+@@ -228,3 +242,4 @@ def update_session_auth_hash(request, user):
+     request.session.cycle_key()
+     if hasattr(user, "get_session_auth_hash") and request.user == user:
+         request.session[HASH_SESSION_KEY] = user.get_session_auth_hash()
++
